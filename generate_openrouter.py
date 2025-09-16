@@ -121,7 +121,7 @@ async def main():
     tasks = ["goal_interpretation", "subgoal_decomposition", "action_sequencing", "transition_modeling"]
 
     # Create session with timeout
-    timeout = aiohttp.ClientTimeout(total=60)
+    timeout = aiohttp.ClientTimeout(total=30 * 60)  # 30 minutes timeout
     async with aiohttp.ClientSession(timeout=timeout) as session:
         for i, env in enumerate(envs):
             for j, (task, schema) in enumerate(zip(tasks, schemas)):
