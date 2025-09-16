@@ -12,6 +12,7 @@ from schemas import schemas
 
 # Directory containing the prompt files
 prompts_dir = "eai_starter_kit/llm_prompts"
+end = None  # Set to None to process all prompts, or set to a positive integer to test with a subset
 
 # Specify OpenRouter Model
 model = "deepseek/deepseek-chat-v3.1:free"
@@ -129,7 +130,10 @@ async def main():
                 with open(f"{prompts_dir}/{env}_{task}_prompts.json", "r") as f:
                     starter_llm_prompt = json.load(f)
 
-                _tasks = [ask(session, prompt, schema) for prompt in starter_llm_prompt[:2]]
+                if end is not None:
+                    starter_llm_prompt = starter_llm_prompt[:end]
+
+                _tasks = [ask(session, prompt, schema) for prompt in starter_llm_prompt]
                 results = await tqdm_asyncio.gather(*_tasks)
 
                 # Save results for eai-eval
