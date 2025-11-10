@@ -61,6 +61,34 @@ Action primitive is similar to state primitive. Its formal definition looks like
 - If you want to change state of A, while A is in B and B is closed, you should make sure B is open first.
 - Your output format should strictly follow this json format: {"necessity_to_use_action": <necessity>, "actions_to_include": [<actions>], "output": [<your subgoal plan>]}, where in <necessity> you should put "yes" or "no" to indicate whether actions should be included in subgoal plans. If you believe it is necessary to use actions, in the field <actions>, you should list all actions you used in your output. Otherwise, you should simply output an empty list []. In the field <your subgoal plan>, you should list all Boolean expressions in the required format and the temporal order.
 
+# Additional Required Conventions (to ensure validity and consistency)
+- Affordance and capability checks:
+    - Only use PLUGGED_IN/PLUGGED_OUT on objects that have property HAS_PLUG in the "Relevant Objects" list.
+    - Only use ON/OFF on objects that have property HAS_SWITCH in the "Relevant Objects" list.
+    - Do NOT add PLUGGED_IN for built-in fixtures (e.g., ceiling/wall lights) unless HAS_PLUG is explicitly listed for that object.
+    - When properties are not listed for an object, assume the capability is absent and do not emit the corresponding predicate.
+- Room relation rules:
+    - Use INSIDE(character.id, room.id) to represent location in rooms; never use NEXT_TO with rooms.
+    - State INSIDE at most once unless the character moves to a different room later.
+- Spatial preconditions discipline:
+    - Before LOOKAT / TOUCH / WATCH / READ / TYPE, include FACING(character.id, obj.id) as a precondition.
+    - Before OPEN/CLOSE and before placing/moving objects (ONTOP/INSIDE), include NEXT_TO(character.id, obj.id); FACING is usually required as well.
+- Temporal causality of actions and effects:
+    - If an action causes a state change, the action must appear on a line BEFORE the first occurrence of the effect state, unless that state is already true in Initial States.
+    - Do not assert an effect before its causing action (e.g., TOUCH(remote_control.X) should come before ON(television.Y), unless the TV is already ON initially).
+- De-duplication and grouping hygiene:
+    - Do not repeat the same predicate for the same object across different lines; assert each state change at most once.
+    - Group interchangeable end-of-step states with "and" on the same line; avoid repeating OPEN or other states on multiple lines.
+- Sitting/occupying convention:
+    - Represent sitting/occupying a seat or toilet as ONTOP(character.id, seat_obj.id) for consistency with the examples. Do not use SITTING unless Initial or Goal States explicitly require it.
+- Minimality:
+    - Only include states necessary to reach goals plus essential intermediates; avoid irrelevant additions (e.g., PLUGGED_IN on objects without HAS_PLUG, or extra FACING/NEXT_TO when not needed).
+- Object naming consistency:
+    - Use object identifiers exactly as listed under "Relevant Objects"; do not substitute synonyms (e.g., use soap vs. laundry_detergent strictly according to the given object list).
+- Container and appliance interaction pattern:
+    - If an object A is inside container B and B is CLOSED, OPEN(B) before interacting with A; CLOSE(B) afterwards only if the goal requires it.
+    - A common, valid sequence is: (optional) INSIDE(room) → NEXT_TO(target) → FACING(target) → OPEN(target if container) → placement/movement states (ONTOP/INSIDE) → CLOSED(target if required) → ON/OFF/other activation states (if applicable).
+
 Below are two examples for your better understanding.
 ## Example 1: Task category is "Listen to music"
 ## Relevant Objects in the Scene

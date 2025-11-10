@@ -29,15 +29,21 @@ Action commands include action names and objects. Each action's number of object
 [object, object_id]: Represents 1 object.
 [object 1, object_1_id, object 2, object_2_id]: Represents 2 objects.
 The output must be in JSON format, where:
-Dictionary keys are action names.
-Dictionary values are lists containing the objects (with their IDs) for the corresponding action.
-The order of execution is determined by the order in which the key-value pairs appear in the JSON dictionary.
+Each dictionary key is an action name.
+Each dictionary value is a single list containing the objects (with their IDs) for the corresponding action.
+The order of execution is determined by the order in which the key-value pairs appear in the JSON list.
+
+STRICT JSON OUTPUT REQUIREMENTS:
+- Output ONLY a JSON array of objects. No prose, no code fences, no bracketed pseudo-actions like "[WALK] <light> (411)".
+- Every action object has exactly one key (UPPERCASE action name) and one value (a list of strings: [obj_name, obj_id, ...]).
+- Use ONLY object names and IDs that appear in the input. Never invent objects or IDs.
+- Always include the numeric IDs (as strings) for every object argument.
 
 For example, If you want to first FIND the sink and then PUTBACK a cup into the sink, you should express it as:
-{
-  "FIND": ["sink", "sink_id"],
-  "PUTBACK": ["cup", "cup_id", "sink", "sink_id"]
-}
+[
+  {"FIND": ["sink", "sink_id"]},
+  {"PUTBACK": ["cup", "cup_id", "sink", "sink_id"]}
+]
 
 The object of action also needs to satisfied some properties preconditions. For example, SWITCHON's object number is 1. To switch on something, the object should 'HAS_SWITCH'. The rule is represented as SWITCHON = ("Switch on", 1, [['HAS_SWITCH']]). Another example is POUR. POUR's object number is 2. To pour sth A into sth B, A should be pourable and drinkable, and B should be RECIPIENT. The rule is represented as POUR = ("Pour", 2, [['POURABLE', 'DRINKABLE'], ['RECIPIENT']]).
 
@@ -50,42 +56,42 @@ Preconditions for Each Object (List of Lists of Strings): Conditions that must b
 Supported Actions List:
 CLOSE: (1, [['CAN_OPEN']]) # Change state from OPEN to CLOSED
 DRINK: (1, [['DRINKABLE', 'RECIPIENT']]) # Consume a drinkable item
-FIND: (1, [[]]) # Locate and approach an item
-WALK: (1, [[]]) # Move towards something
+FIND: (1, [obj]) # Locate and approach an item
+WALK: (1, [obj]) # Move towards something
 GRAB: (1, [['GRABBABLE']]) # Take hold of an item that can be grabbed
-LOOKAT: (1, [[]]) # Direct your gaze towards something
+LOOKAT: (1, [obj]) # Direct your gaze towards something
 OPEN: (1, [['CAN_OPEN']]) # Open an item that can be opened
-POINTAT: (1, [[]]) # Point towards something
-PUTBACK: (2, [['GRABBABLE'], []]) # Place one object back onto or into another
+POINTAT: (1, [obj]) # Point towards something
+PUTBACK: (2, [['GRABBABLE'], obj]) # Place one object back onto or into another
 PUTIN: (2, [['GRABBABLE'], ['CAN_OPEN']]) # Insert one object into another
-RUN: (1, [[]]) # Run towards something
+RUN: (1, [obj]) # Run towards something
 SIT: (1, [['SITTABLE']]) # Sit on a suitable object
-STANDUP: (0, []) # Stand up from a sitting or lying position
+STANDUP: (0, [   ]) # Stand up from a sitting or lying position
 SWITCHOFF: (1, [['HAS_SWITCH']]) # Turn off an item with a switch
 SWITCHON: (1, [['HAS_SWITCH']]) # Turn on an item with a switch
-TOUCH: (1, [[]]) # Physically touch something
-TURNTO: (1, [[]]) # Turn your body to face something
-WATCH: (1, [[]]) # Observe something attentively
-WIPE: (1, [[]]) # Clean or dry something by rubbing
-PUTON: (1, [['CLOTHES']]) # Dress oneself with an item of clothing
+TOUCH: (1, [obj]) # Physically touch something
+TURNTO: (1, [obj]) # Turn your body to face something
+WATCH: (1, [obj]) # Observe something attentively
+WIPE: (1, [obj]) # Clean or dry something by rubbing
+PUTON: (1, [['CLOTHES']]) # Dress oneself with the item of clothing currently held
 PUTOFF: (1, [['CLOTHES']]) # Remove an item of clothing
 GREET: (1, [['PERSON']]) # Offer a greeting to a person
-DROP: (1, [[]]) # Let go of something so it falls
+DROP: (1, [obj]) # Let go of something so it falls
 READ: (1, [['READABLE']]) # Read text from an object
 LIE: (1, [['LIEABLE']]) # Lay oneself down on an object
 POUR: (2, [['POURABLE', 'DRINKABLE'], ['RECIPIENT']]) # Transfer a liquid from one container to another
 PUSH: (1, [['MOVABLE']]) # Exert force on something to move it away from you
 PULL: (1, [['MOVABLE']]) # Exert force on something to bring it towards you
 MOVE: (1, [['MOVABLE']]) # Change the location of an object
-WASH: (1, [[]]) # Clean something by immersing and agitating it in water
-RINSE: (1, [[]]) # Remove soap from something by applying water
-SCRUB: (1, [[]]) # Clean something by rubbing it hard with a brush
+WASH: (1, [obj]) # Clean something by immersing and agitating it in water
+RINSE: (1, [obj]) # Remove soap from something by applying water
+SCRUB: (1, [obj]) # Clean something by rubbing it hard with a brush
 SQUEEZE: (1, [['CLOTHES']]) # Compress clothes to extract liquid
 PLUGIN: (1, [['HAS_PLUG']]) # Connect an electrical device to a power source
 PLUGOUT: (1, [['HAS_PLUG']]) # Disconnect an electrical device from a power source
-CUT: (1, [['EATABLE', 'CUTABLE']]) # Cut some food
+CUT: (1, [['EATABLE', 'CUTTABLE']]) # Cut some food
 EAT: (1, [['EATABLE']]) # Eat some food
-RELEASE: (1, [[]]) # Let go of something inside the current room
+RELEASE: (1, [obj]) # Let go of something inside the current room
 TYPE: (1, [['HAS_SWITCH']]) # Type on a keyboard
 
 Notice:
@@ -103,7 +109,50 @@ Notice:
 
 7. Output should not be empty! Always output some actions and their arguments.
 
-8. If you want to apply an action on an object, you should WALK to the object first.
+8. If you want to apply an action on an object, you should WALK to the object first. For example, if you want to apply an action to an item in another room, you should first WALK to that item, and then apply the action.
+
+9. If an object is placed with a grabbable container, the container will inherit the properties of the object. For example, if water is DRINKABLE and it is contained in a cup, then the cup is also DRINKABLE.
+
+Rules and recipes to avoid common mistakes (follow strictly):
+
+R1. Always WALK before acting on an object.
+- Before applying ANY action to an object, first WALK to that specific object.
+- You may skip WALK only if the input explicitly states the character is NEAR that object (an "is NEAR to" edge) at the moment of action. When unsure, WALK.
+
+R2. Use PLUGIN only when required by the state.
+- Use PLUGIN only if the device has HAS_PLUG and its node state includes PLUGGED_OUT.
+- If it is already PLUGGED_IN (or no plug state is given), do NOT add PLUGIN. Prefer SWITCHON directly for devices with HAS_SWITCH.
+
+R3. Canonical action sequences (maintain this order):
+- Power and use an electric device (e.g., computer, light, stereo):
+  WALK device → (PLUGIN if PLUGGED_OUT) → SWITCHON device → then use it (e.g., TYPE, WATCH, etc.). Never TYPE/USE before SWITCHON.
+- Washing hands/dishes: WALK faucet or sink area → SWITCHON faucet (if water source is needed/off) → WASH target → RINSE target.
+- Getting a drink: WALK container (cup/glass) → GRAB container → If needed, WALK water source → (OPEN container/cupboard if the water is inside) → (SWITCHON faucet if needed) → POUR water into container → DRINK from container.
+
+R4. Containers and access:
+- If an object is INSIDE a CLOSED container, WALK the container → OPEN it before GRAB/PUTIN/PUTBACK.
+
+R5. Goal-aligned final actions:
+- For "character is ON to X": make SIT or LIE on X the last action relating to X.
+- For "character is FACING/CLOSE to X": include TURNTO/LOOKAT/WATCH (as appropriate) after any necessary setup so the relation holds at the end.
+
+R6. Avoid redundancy and no-ops:
+- Do not repeat the same action on the same object consecutively (e.g., double LIE/DRINK/TOUCH).
+- Do not act on irrelevant objects (e.g., WASH faucet itself).
+
+R7. Prefer WALK over FIND when IDs are provided.
+- Since inputs include object IDs, directly WALK to the target object instead of issuing FIND unless explicitly required by action goals.
+
+R8. Never include <character> as an action object.
+- The subject is always the character; action arguments must be non-character objects from the input list with their IDs.
+
+Submission checklist (verify before outputting):
+- Every acted-on object has a preceding WALK unless NEAR is explicitly given in the input just before that action.
+- Devices to be used are SWITCHON before TYPE/WATCH/other usage, and PLUGIN is included only if PLUGGED_OUT.
+- For washing: WASH occurs before RINSE.
+- For items inside containers: OPEN precedes GRAB/PUTIN/PUTBACK.
+- No duplicate consecutive actions on the same object; stop after goals are satisfied.
+- Output is a pure JSON array with correct action objects and argument lists with IDs; no extra text.
 
 Input:
 The relevant objects in the scene are:

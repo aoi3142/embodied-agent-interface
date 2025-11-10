@@ -9,7 +9,7 @@ The output should be a list of action commands so that after the robot executes 
 Data format: After # is the explanation.
 
 Format of the states:
-The environment state is a list starts with a uniary predicate or a binary prediate, followed by one or two obejcts.
+The environment state is a list that starts with a unary predicate or a binary predicate, followed by one or two objects.
 You will be provided with multiple environment states as the initial state and the target state.
 For example:
 ['inside', 'strawberry_0', 'fridge_97'] #strawberry_0 is inside fridge_97
@@ -34,21 +34,21 @@ The action_name must be one of the following:
 LEFT_GRASP # the robot grasps the object with its left hand, to execute the action, the robot's left hand must be empty, e.g. {{'action': 'LEFT_GRASP', 'object': 'apple_0'}}.
 RIGHT_GRASP # the robot grasps the object with its right hand, to execute the action, the robot's right hand must be empty, e.g. {{'action': 'RIGHT_GRASP', 'object': 'apple_0'}}.
 LEFT_PLACE_ONTOP # the robot places the object in its left hand on top of the target object and release the object in its left hand, e.g. {{'action': 'LEFT_PLACE_ONTOP', 'object': 'table_1'}}.
-RIGHT_PLACE_ONTOP # the robot places the object in its right hand on top of the target object and release the object in its left hand, e.g. {{'action': 'RIGHT_PLACE_ONTOP', 'object': 'table_1'}}.
+RIGHT_PLACE_ONTOP # the robot places the object in its right hand on top of the target object and releases the object in its right hand, e.g. {{'action': 'RIGHT_PLACE_ONTOP', 'object': 'table_1'}}.
 LEFT_PLACE_INSIDE # the robot places the object in its left hand inside the target object and release the object in its left hand, to execute the action, the robot's left hand must hold an object, and the target object can't be closed e.g. {{'action': 'LEFT_PLACE_INSIDE', 'object': 'fridge_1'}}.
-RIGHT_PLACE_INSIDE # the robot places the object in its right hand inside the target object and release the object in its left hand, to execute the action, the robot's right hand must hold an object, and the target object can't be closed, e.g. {{'action': 'RIGHT_PLACE_INSIDE', 'object': 'fridge_1'}}.
-RIGHT_RELEASE # the robot directly releases the object in its right hand, to execute the action, the robot's left hand must hold an object, e.g. {{'action': 'RIGHT_RELEASE', 'object': 'apple_0'}}.
-LEFT_RELEASE # the robot directly releases the object in its left hand, to execute the action, the robot's right hand must hold an object, e.g. {{'action': 'LEFT_RELEASE', 'object': 'apple_0'}}.
-OPEN # the robot opens the target object, to execute the action, the target object should be openable and closed, also, toggle off the target object first if want to open it, e.g. {{'action': 'OPEN', 'object': 'fridge_1'}}.
+RIGHT_PLACE_INSIDE # the robot places the object in its right hand inside the target object and releases the object in its right hand, to execute the action, the robot's right hand must hold an object, and the target object can't be closed, e.g. {{'action': 'RIGHT_PLACE_INSIDE', 'object': 'fridge_1'}}.
+RIGHT_RELEASE # the robot directly releases the object in its right hand; to execute, the robot's right hand must be holding an object, e.g. {{'action': 'RIGHT_RELEASE', 'object': 'apple_0'}}.
+LEFT_RELEASE # the robot directly releases the object in its left hand; to execute, the robot's left hand must be holding an object, e.g. {{'action': 'LEFT_RELEASE', 'object': 'apple_0'}}.
+OPEN # the robot opens the target object, to execute the action, the target object should be openable and closed, e.g. {{'action': 'OPEN', 'object': 'fridge_1'}}.
 CLOSE # the robot closes the target object, to execute the action, the target object should be openable and open, e.g. {{'action': 'CLOSE', 'object': 'fridge_1'}}.
 COOK # the robot cooks the target object, to execute the action, the target object should be put in a pan, e.g. {{'action': 'COOK', 'object': 'apple_0'}}.
-CLEAN # the robot cleans the target object, to execute the action, the robot should have a cleaning tool such as rag, the cleaning tool should be soaked if possible, or the target object should be put into a toggled on cleaner like a sink or a dishwasher, e.g. {{'action': 'CLEAN', 'object': 'window_0'}}.
+CLEAN # the robot cleans the target object; to execute, the robot should have a cleaning tool such as a rag, the cleaning tool should be soaked if possible, or the target object should be put into a toggled-on cleaner like a sink or a dishwasher. Do not CLEAN objects that are already clean (not dusty/stained). e.g. {{'action': 'CLEAN', 'object': 'window_0'}}.
 FREEZE # the robot freezes the target object e.g. {{'action': 'FREEZE', 'object': 'apple_0'}}.
 UNFREEZE # the robot unfreezes the target object, e.g. {{'action': 'UNFREEZE', 'object': 'apple_0'}}.
-SLICE # the robot slices the target object, to execute the action, the robot should have a knife in hand, e.g. {{'action': 'SLICE', 'object': 'apple_0'}}.
+SLICE # the robot slices the target object; to execute, the robot should have a knife in one hand and at least one hand free to operate as required, e.g. {{'action': 'SLICE', 'object': 'apple_0'}}.
 SOAK # the robot soaks the target object, to execute the action, the target object must be put in a toggled on sink, e.g. {{'action': 'SOAK', 'object': 'rag_0'}}.
 DRY # the robot dries the target object, e.g. {{'action': 'DRY', 'object': 'rag_0'}}.
-TOGGLE_ON # the robot toggles on the target object, to execute the action, the target object must be closed if the target object is openable and open e.g. {{'action': 'TOGGLE_ON', 'object': 'light_0'}}.
+TOGGLE_ON # the robot toggles on the target object, to execute the action, if the target object is openable (e.g., dishwasher), the target object must be first closed, e.g. {{'action': 'TOGGLE_ON', 'object': 'light_0'}}.
 TOGGLE_OFF # the robot toggles off the target object, e.g. {{'action': 'TOGGLE_OFF', 'object': 'light_0'}}.
 LEFT_PLACE_NEXTTO # the robot places the object in its left hand next to the target object and release the object in its left hand, e.g. {{'action': 'LEFT_PLACE_NEXTTO', 'object': 'table_1'}}.
 RIGHT_PLACE_NEXTTO # the robot places the object in its right hand next to the target object and release the object in its right hand, e.g. {{'action': 'RIGHT_PLACE_NEXTTO', 'object': 'table_1'}}.
@@ -62,23 +62,38 @@ LEFT_PLACE_UNDER # the robot places the object in its left hand under the target
 RIGHT_PLACE_UNDER # the robot places the object in its right hand under the target object and release the object in its right hand, e.g. {{'action': 'RIGHT_PLACE_UNDER', 'object': 'table_1'}}.
 
 Format of the interactable objects:
-Interactable object will contain multiple lines, each line is a dictionary with the following format:
+Interactable objects will contain multiple lines, each line is a dictionary with the following format:
 {{
     "name": "object_name",
     "category": "object_category"
 }}
 object_name is the name of the object, which you must use in the action command, object_category is the category of the object, which provides a hint for you in interpreting initial and goal condtions.
 
-Please pay specail attention:
-1. The robot can only hold one object in each hand.
-2. Action name must be one of the above action names, and the object name must be one of the object names listed in the interactable objects.
-3. All PLACE actions will release the object in the robot's hand, you don't need to explicitly RELEASE the object after the PLACE action.
-4. For LEFT_PLACE_NEXTTO_ONTOP and RIGHT_PLACE_NEXTTO_ONTOP, the action command are in the format of {{'action': 'action_name', 'object': 'obj_name1, obj_name2'}}
-5. If you want to perform an action to an target object, you must make sure the target object is not inside a closed object.
-6. For actions like OPEN, CLOSE, SLICE, COOK, CLEAN, SOAK, DRY, FREEZE, UNFREEZE, TOGGLE_ON, TOGGLE_OFF, at least one of the robot's hands must be empty, and the target object must have the corresponding property like they're openable, toggleable, etc.
-7. For PLACE actions and RELEASE actions, the robot must hold an object in the corresponding hand.
-8. Before slicing an object, the robot can only interact with the object (e.g. peach_0), after slicing the object, the robot can only interact with the sliced object (e.g. peach_0_part_0).
-
+Please pay special attention:
+1. Hand capacity and availability:
+    - The robot can only hold one object in each hand. If both hands are occupied, PLACE or RELEASE an object to free a hand before GRASP, OPEN, CLOSE, TOGGLE, SLICE, or CLEAN.
+    - Actions OPEN, CLOSE, TOGGLE_ON/OFF, SLICE, CLEAN require at least one free hand.
+2. Valid actions and object names:
+    - Action name must be one of the above, and the object name must be one of the interactable objects.
+3. PLACE and RELEASE semantics:
+    - All PLACE actions release the object in that hand automatically. Do not call RELEASE immediately after a PLACE.
+    - RIGHT_RELEASE/LEFT_RELEASE require the corresponding hand to be holding something.
+4. Multi-target PLACE (NEXTTO_ONTOP):
+    - For LEFT_PLACE_NEXTTO_ONTOP and RIGHT_PLACE_NEXTTO_ONTOP, use {{'action': 'action_name', 'object': 'obj_name1, obj_name2'}}.
+5. Container access and gating:
+    - You cannot GRASP from or PLACE into a closed container (e.g., cabinet, fridge, jar). OPEN it first. Only CLOSE if the target state requires it or to enable a device (e.g., dishwasher before TOGGLE_ON).
+6. State-aware actions (avoid no-ops):
+    - Only OPEN if the object is closed; only CLOSE if it is open and needed; only CLEAN if the object is dusty/stained; avoid repeating CLEAN after the state is satisfied.
+7. Preconditioned actions:
+    - CLEAN requires a soaked cleaning tool (e.g., rag) when applicable, or the target object placed into a toggled-on cleaner (sink/dishwasher).
+    - SOAK requires the target object placed in a toggled-on sink.
+8. Slicing and post-slice affordances:
+    - Before slicing, interact with the whole object (e.g., peach_0). After SLICE, the original becomes parts named like peach_0_part_0, peach_0_part_1, ... You must interact with these parts thereafter (do not refer to the original whole).
+9. Quantifiers and goal coverage:
+    - If the target state includes quantifiers like 'forall', 'exists', 'forpairs', or 'forn', plan to satisfy ALL required instances, pairing or counting deterministically as needed (e.g., pair basket_i with item_i in order). Do not stop after partially satisfying a universal condition.
+10. Planning discipline:
+    - Sequence actions to satisfy preconditions before effects (e.g., open container, ensure hand free, position tool, then act).
+    - Do not include redundant or contradictory actions. Keep the action list minimal while fully satisfying the target state.
 
 Examples: after# is the explanation.
 
