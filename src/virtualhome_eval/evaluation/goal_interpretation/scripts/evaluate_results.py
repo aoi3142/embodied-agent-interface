@@ -42,6 +42,7 @@ def evaluate_results(args):
     model_file = extract_model_names(llm_response_path)
 
     all_results = {}
+    all_detailed_analysis = {}
 
     for model_name in model_file:
         llm_response_json = os.path.join(llm_response_path, f"{model_name}_outputs.json")
@@ -67,8 +68,21 @@ def evaluate_results(args):
 
         format_wrong_goals = 0
 
+        detailed_analysis = {}
+        all_detailed_analysis[model_name] = detailed_analysis
+
         for output_dict in llm_response:
             file_id = output_dict["identifier"]
+            detailed_analysis[file_id] = {
+                "error": [],
+                "correct_node_goal": [],
+                "incorrect_node_goal": [],
+                "correct_edge_goal": [],
+                "incorrect_edge_goal": [],
+                "correct_action_goal": [],
+                "incorrect_action_goal": [],
+            }
+            curr_detailed_analysis = detailed_analysis[file_id]
 
             # get symbolic goals
             task = id2task[file_id]
@@ -98,6 +112,9 @@ def evaluate_results(args):
             gold_node_goals = remove_duplicate_dicts(gold_node_goals)
             gold_edge_goals = remove_duplicate_dicts(gold_edge_goals)
             gold_action_goals = list(set(gold_action_goals))
+            curr_detailed_analysis["gold_node_goals"] = gold_node_goals
+            curr_detailed_analysis["gold_edge_goals"] = gold_edge_goals
+            curr_detailed_analysis["gold_action_goals"] = gold_action_goals
 
             output = output_dict["llm_output"]
             # if llm output starts with ```json
@@ -107,6 +124,7 @@ def evaluate_results(args):
                 output = output.strip("```")
             output = output.strip().replace("\n", "")
             output = output.replace("'", '"')
+            curr_detailed_analysis["llm_output"] = output
             try:
                 output = json.loads(output)
             except Exception as e:
@@ -115,6 +133,7 @@ def evaluate_results(args):
                 logger.info(
                     f"model {model_name}, task {task}, file_id {file_id} has format wrong output"
                 )
+                curr_detailed_analysis["error"].append("JSONDecodeError")
                 continue
 
             logger.info(f"Ground truth {gold_node_goals=}")
@@ -160,6 +179,7 @@ def evaluate_results(args):
                     logger.info(
                         f"model {model_name}, task {task}, file_id {file_id} has format wrong output"
                     )
+                    curr_detailed_analysis["error"].append(f"format wrong output in node goal {node_goal}")
                     continue
                 if node_goal["name"] not in name_to_id:
                     hallucination_goals += 1
@@ -167,6 +187,7 @@ def evaluate_results(args):
                         f"model {model_name}, task {task}, file_id {file_id} has hallucination output"
                     )
                     logger.info(f"hallucinated output is {node_goal}")
+                    curr_detailed_analysis["error"].append(f"hallucination output in node goal: {node_goal}")
                     continue
                 indexed_node_goals = {
                     "id": name_to_id[node_goal["name"]],
@@ -176,7 +197,10 @@ def evaluate_results(args):
                 logger.info(indexed_node_goals)
                 if indexed_node_goals in gold_node_goals:
                     delta_TP_node_goals += 1
+                    curr_detailed_analysis["correct_node_goal"].append(indexed_node_goals)
                 else:
+                    curr_detailed_analysis["incorrect_node_goal"].append(indexed_node_goals)
+                    curr_detailed_analysis["error"].append(f"incorrect node goal: {indexed_node_goals}")
                     delta_FP_node_goals += 1
             delta_FN_node_goals += len(gold_node_goals) - delta_TP_node_goals
             total_node_goals += delta_TP_node_goals + delta_FP_node_goals
@@ -205,6 +229,7 @@ def evaluate_results(args):
                     logger.info(
                         f"model {model_name}, task {task}, file_id {file_id} has format wrong output"
                     )
+                    curr_detailed_analysis["error"].append(f"format wrong output in edge goals {edge_goal}")
                     continue
                 if (
                     edge_goal["from_name"] not in name_to_id
@@ -215,6 +240,7 @@ def evaluate_results(args):
                         f"model {model_name}, task {task}, file_id {file_id} has hallucination output"
                     )
                     logger.info(f"hallucinated output is {edge_goal}")
+                    curr_detailed_analysis["error"].append(f"hallucination output in edge goals: {edge_goal}")
                     continue
                 indexed_edge_goals = {
                     "from_id": name_to_id[edge_goal["from_name"]],
@@ -223,8 +249,11 @@ def evaluate_results(args):
                 }
                 logger.info(indexed_edge_goals)
                 if indexed_edge_goals in gold_edge_goals:
+                    curr_detailed_analysis["correct_edge_goal"].append(indexed_edge_goals)
                     delta_TP_edge_goals += 1
                 else:
+                    curr_detailed_analysis["incorrect_edge_goal"].append(indexed_edge_goals)
+                    curr_detailed_analysis["error"].append(f"incorrect edge goal: {indexed_edge_goals}")
                     delta_FP_edge_goals += 1
             delta_FN_edge_goals += len(gold_edge_goals) - delta_TP_edge_goals
             total_edge_goals += delta_TP_edge_goals + delta_FP_edge_goals
@@ -250,6 +279,7 @@ def evaluate_results(args):
                     logger.info(
                         f"model {model_name}, task {task}, file_id {file_id} has format wrong output"
                     )
+                    curr_detailed_analysis["error"].append(f"format wrong output in action goal {action_goal_dict}")
                     continue
                 action_goal = action_goal_dict["action"].upper()
                 logger.info(action_goal)
@@ -266,10 +296,13 @@ def evaluate_results(args):
                     if action_goal in gd_action_goals:
                         delta_TP_acion_goals += 1
                         found_flag = True
+                        curr_detailed_analysis["correct_action_goal"].append(action_goal_dict)
                         if gd_action_goals in gold_action_goals:
                             gold_action_goals_cp.remove(gd_action_goals)
                         break
                 if not found_flag:
+                    curr_detailed_analysis["incorrect_action_goal"].append(action_goal_dict)
+                    curr_detailed_analysis["error"].append(f"incorrect action goal: {action_goal_dict}")
                     delta_FP_action_goals += 1
             delta_FN_action_goals += len(gold_action_goals) - delta_TP_acion_goals
             total_action_goals += delta_TP_acion_goals + delta_FP_action_goals
@@ -346,5 +379,7 @@ def evaluate_results(args):
         with open(osp.join(save_path, "summary.json"), "w") as f:
             json.dump(summary, f, indent=4)
             logger.info(f'Evaluate results of {model_name} saved to {save_path}')
+        with open(osp.join(save_path, "detailed_analysis.json"), "w") as f:
+            json.dump(detailed_analysis, f, indent=4)
 
     return all_results

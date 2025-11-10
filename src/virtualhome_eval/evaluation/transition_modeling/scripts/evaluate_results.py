@@ -500,6 +500,9 @@ def evaluate_results(args):
         with open(osp.join(save_path, "summary.json"), "w") as f:
             json.dump(summary, f, indent=4)
             logger.info(f"Evaluation results of {model_name} saved to {save_path}")
+        with open(osp.join(save_path, "error_info.json"), "w") as f:
+            json.dump({k["identifier"]:v[1] for k,v in zip(llm_response, results)}, f, indent=4)
+            logger.info(f"Error info of {model_name} saved to {save_path}")
 
     return all_results
 

@@ -372,6 +372,12 @@ def evaluate_results(args):
             f"Additional step: {all_additional_step_num}, rate = {100.0 * all_additional_step_num/program_num:.2f}%"
         )
 
+        if all_node_goals == 0:
+            all_node_goals = 1  # avoid zero division
+        if all_edge_goals == 0:
+            all_edge_goals = 1  # avoid zero division
+        if all_action_goals == 0:
+            all_action_goals = 1  # avoid zero division
         # keep three decimal digits
         logger.info("For scene metrics:")
         logger.info(

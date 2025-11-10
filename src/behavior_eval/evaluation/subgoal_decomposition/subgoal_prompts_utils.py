@@ -82,7 +82,7 @@ def get_subgoal_prompt(env: ActionSequenceEvaluator):
     task_prompt = prompt_components['target_task']
     task_prompt = task_prompt.replace('<task_name>', task_name).replace('<relevant_objects>', '\n'.join(tl_objs)).replace('<initial_states>', '\n'.join(tl_exps)).replace('<goal_states>', '\n'.join(s_tl_goal_conditions))
     
-    input_prompt = task_prompt
+    input_prompt = prompt_components['system_prompt'] + "\n\n" + task_prompt
     return input_prompt
 
     

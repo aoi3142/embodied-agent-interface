@@ -1,5 +1,5 @@
 from behavior_eval.transition_model.base_env import BaseEnv
-from behavior_eval.evaluation.transition_modeling.resources.prompt_templates.prompts import prompt2 as prompt
+from behavior_eval.evaluation.transition_modeling.resources.prompt_templates.prompts import prompt
 import behavior_eval
 import os
 from bddl.config import get_definition_filename

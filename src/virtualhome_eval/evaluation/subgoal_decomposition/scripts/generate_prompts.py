@@ -30,7 +30,7 @@ def generate_prompts(args):
     object_placing = utils.load_object_placing()
     name_equivalence = utils.load_name_equivalence()
 
-    helm_prompt_path = osp.join(output_dir, "helm_prompt.json")
+    helm_prompt_path = osp.join(output_dir, "subgoal_decomposition_prompts.json")
     helm_prompt_list = json.load(open(helm_prompt_path, "r")) if osp.exists(helm_prompt_path) else None
     helm_prompt_list = [] if helm_prompt_list is None else helm_prompt_list
     for task_name, task_detail in task_dict.items():
@@ -83,6 +83,7 @@ def generate_prompts(args):
             necessity = 'Yes' if action_states_str != "None" else 'No'
             template_prompt = get_meta_prompt_component()
             prompt = add_task_info_into_prompt_component(template_prompt, task_name, relevant_nodes_str, init_states_str, final_states_str, action_states_str, necessity)
+            prompt = template_prompt['system_prompt'] + '\n' + prompt
             helm_prompt_list.append(
                 {
                     'identifier': f'{scene_id}_{file_id}',
