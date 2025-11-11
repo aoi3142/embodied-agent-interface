@@ -91,10 +91,12 @@ payload = {
     # "top_logprobs": 20,
     # "max_tokens": int(16384),
     # "stop_token_ids": [0],  # Deal with NaN
-    # "provider": {   # For OpenRouter, force provider to support all provided parameters
-    #     "require_parameters": True,
-    #     "allow_fallbacks": False
-    # }
+    "provider": {   # For OpenRouter, force provider to support all provided parameters
+        "require_parameters": True,
+        "quantizations": ["bf16"],
+        "allow_fallbacks": False,
+        "sort": "price"
+    }
 }
 
 def wait_for_url_to_be_up(url: str, timeout: int = 5, retry_interval: int = 1):
@@ -307,10 +309,7 @@ async def process_env_task(session, min_limiter, env, task, schema, postprocessi
     if added_count > 0:
         tqdm.write(f"Added {added_count} existing outputs to chat histories for {env} - {task}")
 
-    _tasks = [ask(session, min_limiter, identifier, env, task, chat, schema, postprocessing, reflexion_round=(len(chat)//2)) for identifier, chat in chats.items()]
-    if end is not None:
-        _tasks = _tasks[:end]
-    _tasks = [t for t in _tasks for _ in range(COPIES_PER_PROMPT)]
+    _tasks = [ask(session, min_limiter, identifier, env, task, chat, schema, postprocessing, reflexion_round=(len(chat)//2)) for _, (identifier, chat) in zip(range(end), chats.items()) for _ in range(COPIES_PER_PROMPT)]
     gathered_results = await tqdm_asyncio.gather(*_tasks, desc=f"{env} - {task}", total=len(_tasks))
 
     results = []
@@ -410,11 +409,13 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=None, help="Port for vLLM server for local testing, overrides URL to localhost")
     parser.add_argument("--max_tokens", type=int, default=payload["max_tokens"] if "max_tokens" in payload else None, help="Max tokens for generation")
     args = parser.parse_args()
+    model = args.model
     if args.port is not None:
         url = f"http://localhost:{args.port}/v1/chat/completions"
+        payload.pop("provider", None)  # Remove provider for local vLLM
     if args.max_tokens is not None:
         payload["max_tokens"] = args.max_tokens
-    model = args.model
+    payload["model"] = model
     tqdm.write(f"Using model: {model} on URL: {url}")
     # Run the main function directly (no longer async)
     main()
