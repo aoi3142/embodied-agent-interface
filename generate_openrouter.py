@@ -309,7 +309,7 @@ async def process_env_task(session, min_limiter, env, task, schema, postprocessi
     if added_count > 0:
         tqdm.write(f"Added {added_count} existing outputs to chat histories for {env} - {task}")
 
-    _tasks = [ask(session, min_limiter, identifier, env, task, chat, schema, postprocessing, reflexion_round=(len(chat)//2)) for _, (identifier, chat) in zip(range(end), chats.items()) for _ in range(COPIES_PER_PROMPT)]
+    _tasks = [ask(session, min_limiter, identifier, env, task, chat, schema, postprocessing, reflexion_round=(len(chat)//2)) for _, (identifier, chat) in zip(range(end if end is not None else len(chats)), chats.items()) for _ in range(COPIES_PER_PROMPT)]
     gathered_results = await tqdm_asyncio.gather(*_tasks, desc=f"{env} - {task}", total=len(_tasks))
 
     results = []
