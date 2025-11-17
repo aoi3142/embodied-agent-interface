@@ -17,7 +17,7 @@ State primitive is a tuple of a predicate name and its arguments. Its formal def
 | LYING | (character1.id) | character1 is lying |
 | CLEAN | (obj1.id) | obj1 is clean |
 | DIRTY | (obj1.id) | obj1 is dirty |
-| ONTOP | (obj1.id, obj2.id) | obj1 is on top of obj2 |
+| ONTOP | (obj1.id, obj2.id) | obj1 is on top of obj2, if obj1.id is a character, it is treated as sitting/lying on obj2 |
 | INSIDE | (obj1.id, obj2.id) | obj1 is inside obj2 |
 | BETWEEN | (obj1.id, obj2.id, obj3.id) | obj1 is between obj2 and obj3 |
 | NEXT_TO | (obj1.id, obj2.id) | obj1 is close to or next to obj2 |
@@ -42,11 +42,13 @@ Action primitive is similar to state primitive. Its formal definition looks like
 | SQUEEZE | (obj1.id) | obj1 is ['CLOTHES'] | squeezes obj1 |
 | SLEEP | none | none | sleeps, need to be at LYING or SITTING first |
 | WAKEUP | none | none | wakes up, need to be at LYING or SITTING first |
+| STANDUP | none | none | stands up, need to be at LYING or SITTING first |
 | RINSE | (obj1.id) | none | rinses obj1, use only for cleaning appliances or teeth |
 | SCRUB | (obj1.id) | none | scrubs obj1, use only for cleaning appliances or teeth |
 | WASH | (obj1.id) | none | washes obj1, use only for appliances |
 | GRAB | (obj1.id) | obj1 is ['GRABBABLE'] | grabs obj1 |
 | SWITCHOFF | (obj1.id) | obj1 is ['HAS_SWITCH'] | switches off obj1 |
+| POUR | (obj1.id, obj2.id) | pours obj1 into obj2 |
 
 # Rules You Must Follow
 - Temporal logic formula refers to a Boolean expression that describes a subgoals plan with temporal and logical order.
@@ -59,35 +61,11 @@ Action primitive is similar to state primitive. Its formal definition looks like
 - When there is temporal order requirement, output the Boolean expressions in different lines.
 - Add intermediate states if necessary to improve logical consistency.
 - If you want to change state of A, while A is in B and B is closed, you should make sure B is open first.
+- Posture and navigation: If initial states include SITTING or LYING and you need to MOVE/FIND/NEXT_TO/FACING, first stand up. In such cases, set "necessity_to_use_action" to "yes" and include STANDUP as the first line. Avoid SITTING/LYING or ONTOP of chair/bed before completing FIND/NEXT_TO/FACING steps unless the final goal requires it.
+- Affordances and properties: Only assert states compatible with object properties from Relevant Objects. Examples: use PLUGGED_IN(obj) only if obj has HAS_PLUG. For BODY_PART like hands (if explicitly stated in scene), avoid INSIDE/HOLDS relations (e.g., do not include INSIDE(hands_both.*, sink.*) before RINSE(hands_both.*)).
+- Containers: If an item is INSIDE a container and the container is CLOSED, OPEN the container before GRAB/PUTIN/ONTOP (e.g., if plate.* is inside dishwasher.*, OPEN(dishwasher.*) before GRAB(plate.*)).
+- Minimal constraints: Do not over-constrain with unnecessary states (e.g., avoid asserting PLUGGED_IN for non-pluggable items, or redundant both-hands holds) unless required by the final goals.
 - Your output format should strictly follow this json format: {"necessity_to_use_action": <necessity>, "actions_to_include": [<actions>], "output": [<your subgoal plan>]}, where in <necessity> you should put "yes" or "no" to indicate whether actions should be included in subgoal plans. If you believe it is necessary to use actions, in the field <actions>, you should list all actions you used in your output. Otherwise, you should simply output an empty list []. In the field <your subgoal plan>, you should list all Boolean expressions in the required format and the temporal order.
-
-# Additional Required Conventions (to ensure validity and consistency)
-- Affordance and capability checks:
-    - Only use PLUGGED_IN/PLUGGED_OUT on objects that have property HAS_PLUG in the "Relevant Objects" list.
-    - Only use ON/OFF on objects that have property HAS_SWITCH in the "Relevant Objects" list.
-    - Do NOT add PLUGGED_IN for built-in fixtures (e.g., ceiling/wall lights) unless HAS_PLUG is explicitly listed for that object.
-    - When properties are not listed for an object, assume the capability is absent and do not emit the corresponding predicate.
-- Room relation rules:
-    - Use INSIDE(character.id, room.id) to represent location in rooms; never use NEXT_TO with rooms.
-    - State INSIDE at most once unless the character moves to a different room later.
-- Spatial preconditions discipline:
-    - Before LOOKAT / TOUCH / WATCH / READ / TYPE, include FACING(character.id, obj.id) as a precondition.
-    - Before OPEN/CLOSE and before placing/moving objects (ONTOP/INSIDE), include NEXT_TO(character.id, obj.id); FACING is usually required as well.
-- Temporal causality of actions and effects:
-    - If an action causes a state change, the action must appear on a line BEFORE the first occurrence of the effect state, unless that state is already true in Initial States.
-    - Do not assert an effect before its causing action (e.g., TOUCH(remote_control.X) should come before ON(television.Y), unless the TV is already ON initially).
-- De-duplication and grouping hygiene:
-    - Do not repeat the same predicate for the same object across different lines; assert each state change at most once.
-    - Group interchangeable end-of-step states with "and" on the same line; avoid repeating OPEN or other states on multiple lines.
-- Sitting/occupying convention:
-    - Represent sitting/occupying a seat or toilet as ONTOP(character.id, seat_obj.id) for consistency with the examples. Do not use SITTING unless Initial or Goal States explicitly require it.
-- Minimality:
-    - Only include states necessary to reach goals plus essential intermediates; avoid irrelevant additions (e.g., PLUGGED_IN on objects without HAS_PLUG, or extra FACING/NEXT_TO when not needed).
-- Object naming consistency:
-    - Use object identifiers exactly as listed under "Relevant Objects"; do not substitute synonyms (e.g., use soap vs. laundry_detergent strictly according to the given object list).
-- Container and appliance interaction pattern:
-    - If an object A is inside container B and B is CLOSED, OPEN(B) before interacting with A; CLOSE(B) afterwards only if the goal requires it.
-    - A common, valid sequence is: (optional) INSIDE(room) → NEXT_TO(target) → FACING(target) → OPEN(target if container) → placement/movement states (ONTOP/INSIDE) → CLOSED(target if required) → ON/OFF/other activation states (if applicable).
 
 Below are two examples for your better understanding.
 ## Example 1: Task category is "Listen to music"
@@ -166,7 +144,7 @@ LOOKAT or WATCH
 Yes
 
 ## Output: Based on initial states in this task, achieve final goal states logically and reasonably. It does not matter which state should be satisfied first, as long as all goal states can be satisfied at the end. Make sure your output follows the json format. Do not include irrelevant information, only output json object.
-{"necessity_to_use_action": "yes", "actions_to_include": ["LOOKAT"], "output": ["NEXT_TO(character.65, computer.417)", "ONTOP(character.65, chair.356)", "HOLDS_RH(character.65, mouse.413) and HOLDS_LH(character.65, keyboard.415)", "FACING(character.65, computer.417)", "LOOKAT(computer.417)"]}
+{"necessity_to_use_action": "yes", "actions_to_include": ["LOOKAT"], "output": ["INSIDE(character.65, home_office.319)", "NEXT_TO(character.65, computer.417)", "ON(computer.417)", "FACING(character.65, computer.417)", "HOLDS_RH(character.65, mouse.413) and HOLDS_LH(character.65, keyboard.415)", "LOOKAT(computer.417)"]}
 '''
 
 target_task_prompt = \
@@ -187,72 +165,16 @@ target_task_prompt = \
 ## Necessity to Use Actions
 <necessity>
 
-## Output: Based on initial states in this task, achieve final goal states logically and reasonably. It does not matter which state should be satisfied first, as long as all goal states can be satisfied at the end. Make sure your output follows the json format. Do not include irrelevant information, only output json object.'''
-
-
-tmp = \
-'''Now, it is time for you to generate the subgoal plan for the following task.
-# Target Task: Task category is Wash clothes
-## Relevant Objects in the Scene
-| bathroom.1 | Rooms | [] |
-| character.65 | Characters | [] |
-| dining_room.201 | Rooms | [] |
-| basket_for_clothes.1000 | placable_objects | ['CAN_OPEN', 'CONTAINERS', 'GRABBABLE', 'MOVABLE'] |
-| washing_machine.1001 | placable_objects | ['CAN_OPEN', 'CONTAINERS', 'HAS_PLUG', 'HAS_SWITCH', 'RECIPIENT'] |
-| soap.1002 | placable_objects | ['CREAM', 'GRABBABLE', 'MOVABLE'] |
-| clothes_jacket.1003 | placable_objects | ['CLOTHES', 'GRABBABLE', 'HANGABLE', 'MOVABLE'] |
-
-## Initial States
-CLEAN(washing_machine.1001)
-CLOSED(washing_machine.1001)
-OFF(washing_machine.1001)
-PLUGGED_IN(washing_machine.1001)
-INSIDE(clothes_jacket.1003, washing_machine.1001)
-INSIDE(character.65, bathroom.1)
-
-## Goal States
-[States]
-CLOSED(washing_machine.1001)
-ON(washing_machine.1001)
-PLUGGED_IN(washing_machine.1001)
-ONTOP(clothes_jacket.1003, washing_machine.1001)
-ONTOP(soap.1002, washing_machine.1001)
-[Actions]: The following actions must be included in the subgoals plan, each line is one action to satisfy. If "A or B or ..." is presented in one line, then only one of them needs to be satisfied.
-None
-
-## Necessity to use actions
-no
-
 ## Output: Based on initial states in this task, achieve final goal states logically and reasonably. It does not matter which state should be satisfied first, as long as all goal states can be satisfied at the end. Make sure your output follows the json format. Do not include irrelevant information, only output json object.
+
+# Self-check before you output:
+# - If initial states include SITTING or LYING and you need to move/turn, include WAKEUP first (set necessity_to_use_action="yes").
+# - Use only allowed actions; do not invent actions. If a natural action is unsupported, express its effect with states.
+# - Open containers before interacting with their contents.
+# - Only assert affordance-compatible states (e.g., PLUGGED_IN only for objects with HAS_PLUG; never GRAB BODY_PART).
+# - Use only object IDs present in Relevant Objects.
+# - Prefer the order: [INSIDE room] → NEXT_TO → FACING → [OPEN] → [GRAB] → [required actions] → resulting states.
 '''
-
-tmp2 = \
-'''Now, it is time for you to generate the subgoal plan for the following task.
-# Target Task: Task category is Drink
-## Relevant Objects in the Scene
-| character.65 | Characters | [] |
-| dining_room.201 | Rooms | [] |
-| kitchen_counter.230 | Furniture | ['SURFACES'] |
-| sink.231 | Furniture | ['CONTAINERS', 'RECIPIENT'] |
-| faucet.232 | Furniture | ['HAS_SWITCH'] |
-| home_office.319 | Rooms | [] |
-| cup.1000 | placable_objects | ['GRABBABLE', 'MOVABLE', 'POURABLE', 'RECIPIENT'] |
-
-## Initial States
-INSIDE(character.65, home_office.319)
-
-## Goal States
-[States]
-HOLDS_RH(character.65, cup.1000)
-[Actions]: The following actions must be included in the subgoals plan, each line is one action to satisfy. If \"A or B or ...\" is presented in one line, then only one of them needs to be satisfied.
-DRINK
-
-## Necessity to use actions
-yes
-
-## Output: Based on initial states in this task, achieve final goal states logically and reasonably. It does not matter which state should be satisfied first, as long as all goal states can be satisfied at the end. Make sure your output follows the json format. Do not include irrelevant information, only output json object.
-'''
-
 
 import json
 import os

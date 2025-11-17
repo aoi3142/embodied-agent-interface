@@ -3,7 +3,7 @@ The following is predicates defined in this domain file. Pay attention to the ty
 (define (domain virtualhome)
 (:requirements :typing)
   ;; types in virtualhome domain
-  (:types 
+  (:types
     object character  ; Define 'object' and 'character' as types
   )
 
@@ -64,24 +64,24 @@ Each PDDL action definition consists of four main components: action name, param
 (:action [action name]
   :parameters ([action parameters])
   :precondition ([action precondition])
-  :effect ([action effect]) 
+  :effect ([action effect])
 )
 
-The :parameters is the list of variables on which the action operates. It lists variable names and variable types. 
+The :parameters is the list of variables on which the action operates. It lists variable names and variable types.
 
-The :precondition is a first-order logic sentence specifying preconditions for an action. The precondition consists of predicates and 4 possible logical operators: or, and, not, exists! 
-1. The precondition should be structured in Disjunctive Normal Form (DNF), meaning an OR of ANDs. 
+The :precondition is a first-order logic sentence specifying preconditions for an action. The precondition consists of predicates and 4 possible logical operators: or, and, not, exists!
+1. The precondition should be structured in Disjunctive Normal Form (DNF), meaning an OR of ANDs.
 2. The not operator should only be used within these conjunctions. For example, (or (and (predicate1 ?x) (predicate2 ?y)) (and (predicate3 ?x)))
 3. Exists operator is followed by two parts, variable and body. It follows the format: exists (?x - variable type) (predicate1 ?x), which means there exists an object ?x of certain variable type, that predicate1 ?x satisfies.
 
-The :effect lists the changes which the action imposes on the current state. Effects support the following logical operators: and, not, when, forall. (Do NOT use or or exists in effects.)
-1. Effects should generally be several literals connected by AND.
-2. Use WHEN for conditional effects: (when [condition] [effect]) means if the condition holds before the action, then the effect occurs after the action.
-3. If an effect is unconditional, write the predicate directly.
-4. Use NOT to delete a fact after the action.
-5. Use FORALL only when necessary to clear relations tied to the specific object(s) acted upon; avoid global cleanups that blow up the search space.
+The :effect lists the changes which the action imposes on the current state. The precondition consists of predicates and 6 possible logical operators: or, and, not, exists, when, forall.
+1. The effects should generally be several effects connected by AND operators.
+2. For each effect, if it is a conditional effect, use WHEN to check the conditions. The semantics of (when [condition] [effect]) are as follows: If [condition] is true before the action, then [effect] occurs afterwards.
+3. If it is not a conditional effect, use predicates directly.
+4. The NOT operator is used to negate a predicate, signifying that the condition will not hold after the action is executed.
+5. Forall operator is followed by two parts, variable and body. It follows the format: forall (?x - variable type) (predicate1 ?x), which means there for all objects ?x of certain variable type, that predicate1 ?x satisfies.
 
-Example: (and (when (predicate1 ?x) (not (predicate2 ?y))) (predicate3 ?x))
+6. An example of effect is (and (when (predicate1 ?x) (not (predicate2 ?y))) (predicate3 ?x))
 
 Formally, the preconditions and effects are all clauses <Clause>.
 <Clause> := (predicate ?x)
@@ -89,7 +89,7 @@ Formally, the preconditions and effects are all clauses <Clause>.
 <Clause> := (or <Clause1> <Clause2> ...)
 <Clause> := (not <Clause>)
 <Clause> := (when <Clause1> <Clause2>)
-<Clause> := (exists (?x - object type) <Clause>) ; only allowed in preconditions
+<Clause> := (exists (?x - object type) <Clause>)
 <Clause> := (forall (?x - object type) <Clause>)
 
 In any case, the occurrence of a predicate should agree with its declaration in terms of number and types of arguments defined in DOMAIN FILE at the beginning.
@@ -98,7 +98,7 @@ Here is an example of the input problem file and unfinished action. Observe care
 Input:
 Problem file:
 (define (problem hang-clothes-problem)
-  (:domain virtualhome)
+  (:domain household)
   (:objects
     character - character
     shirt - object
@@ -112,9 +112,9 @@ Problem file:
   ) ; This section declares the initial conditions. (clothes shirt) and (hangable hanger) tells the properties of objects; (holds_rh alice shirt) indicates that Alice is holding the shirt in her right hand; (next_to alice hanger) means Alice is next to the hanger, ready to hang the shirt.
   (:goal
     (and
-      (obj_ontop shirt hanger)
+      (ontop shirt hanger)
     )
-  ) ; This section declares the goal.  (obj_ontop shirt hanger) is the goal, where the shirt should end up hanging on the hanger.
+  ) ; This section declares the goal.  (ontop shirt hanger) is the goal, where the shirt should end up hanging on the hanger.
 )
 Action to be finished:
 (:action hang_up_clothes
@@ -123,7 +123,7 @@ Action to be finished:
   :effect ()
 )
 
-Example output: 
+Example output:
 Given the objects in the problem file, and what typically needs to be true to perform an action like hanging up clothes: 1. clothes must indeed be a type of clothing. 2. hang_obj should be something on which clothes can be hung (hangable). 3. char should be holding the clothes, either in the right or left hand. 4. char needs to be next to the hanging object to hang the clothes. Besides, we need to write preconditions in Disjunctive Normal Form.
 These insights guide us to write:
 :precondition (or
@@ -145,7 +145,7 @@ These expectations convert into effects:
 :effect (and
   (when (holds_rh ?char ?clothes)(not (holds_rh ?char ?clothes)))  ; if clothes are held in the right hand, they are no longer held
   (when (holds_lh ?char ?clothes)(not (holds_lh ?char ?clothes)))  ; if clothes are held in the left hand, they are no longer held
-  (obj_ontop ?clothes ?hang_obj)  ; clothes are now hanging on the object
+  (ontop ?clothes ?hang_obj)  ; clothes are now hanging on the object
 )
 
 Combining these parts, the complete hang_up_clothes action becomes:
@@ -166,102 +166,149 @@ Combining these parts, the complete hang_up_clothes action becomes:
     )
   )
   :effect (and
-    (when (holds_rh ?char ?clothes)(not (holds_rh ?char ?clothes))) 
-    (when (holds_lh ?char ?clothes)(not (holds_lh ?char ?clothes))) 
-    (obj_ontop ?clothes ?hang_obj) 
+    (when (holds_rh ?char ?clothes)(not (holds_rh ?char ?clothes)))
+    (when (holds_lh ?char ?clothes)(not (holds_lh ?char ?clothes)))
+    (ontop ?clothes ?hang_obj)
   )
 )
 
 Above is a good example of given predicates in domain file, problem file, action names and parameters, how to reason step by step and write the action body in PDDL. Pay attention to the usage of different connectives and their underlying logic.
 
-Here are canonical, planner-friendly templates for common actions in this domain:
+=== COMMON GENERATION MISTAKES TO AVOID ===
+1. Missing mobility gating: Movement actions (walk_towards, walk_into) usually need (not (sitting ?char)) and (not (lying ?char)).
+2. Hand logic errors: For actions manipulating objects (grab, put_on, put_inside) separate left vs right hand cases with OR of AND blocks (DNF). Do not require both hands simultaneously.
+3. Omitting required effects: Removing holds predicates after placing; adding holds conditionally after grabbing. Include placement predicates like obj_ontop / obj_inside / obj_next_to when needed.
+4. Over-cleaning: Avoid broad (forall ...) deletion unless template shows it (movement proximity propagation). Do not wipe unrelated inside/ontop relations.
+5. Container openness: Distinguish open vs non-openable cases in put_inside; include (can_open ?obj) and state (closed/open) for open/close actions. Include (not (on ?obj)) when required by open precondition template.
+6. Quantifier misuse: Use exists/forall only for conditional hand assignment and movement proximity propagation. Do not wrap simple conjunctions in exists.
+7. DNF correctness: Multiple alternative scenarios => top-level (or (and ...) (and ...)). Single scenario: either one predicate or an AND block. Do not mix OR inside an AND unless normalized.
+8. Predicate fidelity: Use ONLY predicates defined in domain with correct arity/order. No invented predicates or swapped argument types.
+9. Unnecessary negatives: Avoid (not (next_to ...)) in preconditions unless logic demands absence; most movement just asserts new proximity.
+10. Power actions: For switch_on include (has_switch ?obj) (off ?obj) (plugged_in ?obj) (next_to ?char ?obj) then set (on ?obj) and remove (off ?obj).
 
-; movement
-(:action walk_towards
-  :parameters (?char - character ?obj - object)
-  :precondition (and (not (next_to ?char ?obj))) ; keep it minimal; do NOT change inside/room here
-  :effect (next_to ?char ?obj)
-)
-
-; power
-(:action switch_on
-  :parameters (?char - character ?obj - object)
-  :precondition (and (has_switch ?obj) (off ?obj) (next_to ?char ?obj) (plugged_in ?obj))
+=== CANONICAL ACTION TEMPLATES (ADAPT VARIABLE NAMES) ===
+walk_towards:
+  :precondition (and (not (sitting ?char)) (not (lying ?char)))
+  :effect (and (next_to ?char ?obj) (forall (?far_obj - object) (when (not (obj_next_to ?far_obj ?obj)) (not (next_to ?char ?far_obj)))) (forall (?close_obj - object) (when (obj_next_to ?close_obj ?obj) (next_to ?char ?close_obj))))
+switch_on:
+  :precondition (and (has_switch ?obj) (off ?obj) (plugged_in ?obj) (next_to ?char ?obj))
   :effect (and (on ?obj) (not (off ?obj)))
-)
+switch_off:
+  :precondition (and (has_switch ?obj) (on ?obj) (next_to ?char ?obj))
+  :effect (and (off ?obj) (not (on ?obj)))
+grab:
+  :precondition (and (grabbable ?obj) (next_to ?char ?obj) (not (exists (?obj2 - object) (and (obj_inside ?obj ?obj2) (closed ?obj2)))) (not (and (exists (?obj3 - object) (holds_lh ?char ?obj3)) (exists (?obj4 - object) (holds_rh ?char ?obj4)))))
+  :effect (and (when (exists (?obj3 - object) (holds_lh ?char ?obj3)) (holds_rh ?char ?obj)) (when (exists (?obj4 - object) (holds_rh ?char ?obj4)) (holds_lh ?char ?obj)) (when (not (and (exists (?obj3 - object) (holds_lh ?char ?obj3)) (exists (?obj4 - object) (holds_rh ?char ?obj4)))) (holds_rh ?char ?obj)) )
+put_on:
+  :precondition (or (and (next_to ?char ?obj2) (holds_lh ?char ?obj1)) (and (next_to ?char ?obj2) (holds_rh ?char ?obj1)) )
+  :effect (and (obj_next_to ?obj1 ?obj2) (obj_ontop ?obj1 ?obj2) (not (holds_lh ?char ?obj1)) (not (holds_rh ?char ?obj1)))
+put_on_character:
+  :precondition (or (holds_lh ?char ?obj) (holds_rh ?char ?obj))
+  :effect (and (on_char ?obj ?char) (not (holds_lh ?char ?obj)) (not (holds_rh ?char ?obj)))
+put_inside:
+  :precondition (or (and (next_to ?char ?obj2) (holds_lh ?char ?obj1) (not (can_open ?obj2))) (and (next_to ?char ?obj2) (holds_lh ?char ?obj1) (open ?obj2)) (and (next_to ?char ?obj2) (holds_rh ?char ?obj1) (not (can_open ?obj2))) (and (next_to ?char ?obj2) (holds_rh ?char ?obj1) (open ?obj2)) )
+  :effect (and (obj_inside ?obj1 ?obj2) (not (holds_lh ?char ?obj1)) (not (holds_rh ?char ?obj1)))
+open:
+  :precondition (and (can_open ?obj) (closed ?obj) (next_to ?char ?obj) (not (on ?obj)))
+  :effect (and (open ?obj) (not (closed ?obj)))
+close:
+  :precondition (and (can_open ?obj) (open ?obj) (next_to ?char ?obj))
+  :effect (and (closed ?obj) (not (on ?obj)))
+sit:
+  :precondition (and (next_to ?char ?obj) (sittable ?obj) (not (sitting ?char)))
+  :effect (and (sitting ?char) (ontop ?char ?obj))
+lie:
+  :precondition (and (lieable ?obj) (next_to ?char ?obj) (not (lying ?char)))
+  :effect (and (lying ?char) (ontop ?char ?obj) (not (sitting ?char)))
+standup:
+  :precondition (or (sitting ?char) (lying ?char))
+  :effect (and (not (sitting ?char)) (not (lying ?char)))
+turn_to:
+  :precondition ()
+  :effect (facing ?char ?obj)
+walk_into:
+  :precondition (and (not (sitting ?char)) (not (lying ?char)))
+  :effect (and (inside ?char ?room) (forall (?far_obj - object) (when (not (inside_room ?far_obj ?room)) (not (next_to ?char ?far_obj)))) )
+plug_in:
+  :precondition (or (and (next_to ?char ?obj) (has_plug ?obj) (plugged_out ?obj)) (and (next_to ?char ?obj) (has_switch ?obj) (plugged_out ?obj)) )
+  :effect (and (plugged_in ?obj) (not (plugged_out ?obj)))
 
-; pick up (default to right hand, ensure capacity)
-(:action grab
-  :parameters (?char - character ?obj - object)
+=== VALIDATION CHECKLIST ===
+Before final output for each action ensure:
+  A. DNF structure correct.
+  B. Predicate arity & types match domain.
+  C. Effects only change relevant predicates; no broad cleanup unless template shows.
+  D. Hand predicates handled (removed on place, added conditionally on grab).
+  E. All goal predicates obtainable (either already in :init or can be produced).
+  F. No unnecessary negative proximity or redundant quantifiers.
+
+=== QUANTIFIER GUIDANCE ===
+Use exists/forall only for: conditional hand assignment and movement proximity propagation. Avoid other uses.
+
+=== GOAL ALIGNMENT REMINDER ===
+Each goal predicate must appear in :init OR be added by an effect (not later negated). Do not fabricate predicates not in domain or goals.
+
+=== OUTPUT FORMAT STRICTNESS ===
+Return JSON: {"output": "<concatenated actions>"} with only action definitions—no explanations.
+
+Here are some other commonly used actions and their PDDL definition:
+(:action put_to
+  :parameters (?char - character ?obj - object ?dest - object)
+  :precondition (or
+    (and
+      (holds_lh ?char ?obj)    ; The character should hold either with left hand or right hand
+      (next_to ?char ?dest) ; The character should be close to destination
+    )
+    (and
+      (holds_rh ?char ?obj)    ; The character should hold either with left hand or right hand
+      (next_to ?char ?dest) ; The character should be close to destination
+    )
+  )
+  :effect (obj_ontop ?obj ?dest)    ; The object is now on the destination
+)
+This case illustrates the use of OR to include all possible preconditions of an action.
+
+(:action pick_and_place
+  :parameters (?char - character ?obj - object ?dest - object)
   :precondition (and
-    (grabbable ?obj)
-    (next_to ?char ?obj)
-    (not (exists (?x - object) (holds_rh ?char ?x)))
+    (grabbable ?obj)    ; The object must be grabbable
+    (next_to ?char ?obj)  ; The character must be next to the object
+    (not (obj_ontop ?obj ?dest)) ; Ensure the object is not already on the destination
   )
   :effect (and
-    (holds_rh ?char ?obj)
-    ; clear previous placements of the object (bounded cleanup)
-    (forall (?c - object) (when (obj_inside ?obj ?c) (not (obj_inside ?obj ?c))))
-    (forall (?s - object) (when (obj_ontop ?obj ?s) (not (obj_ontop ?obj ?s))))
+    (obj_ontop ?obj ?dest)    ; The object is now on the destination
+    (next_to ?char ?dest)     ; The character is now next to the destination
   )
 )
+This case illustrates a plain case with only AND operator.
 
-; place on a surface
-(:action put_on
-  :parameters (?char - character ?obj1 - object ?obj2 - object)
-  :precondition (or
-    (and (holds_rh ?char ?obj1) (next_to ?char ?obj2))
-    (and (holds_lh ?char ?obj1) (next_to ?char ?obj2))
-  )
-  :effect (and
-    (obj_ontop ?obj1 ?obj2)
-    (when (holds_rh ?char ?obj1) (not (holds_rh ?char ?obj1)))
-    (when (holds_lh ?char ?obj1) (not (holds_lh ?char ?obj1)))
-    ; optional: if object was inside something, clear that relation
-    (forall (?c - object) (when (obj_inside ?obj1 ?c) (not (obj_inside ?obj1 ?c))))
-  )
-)
-
-; place into a container
-(:action put_inside
-  :parameters (?char - character ?obj1 - object ?obj2 - object)
-  :precondition (or
-    (and (holds_rh ?char ?obj1) (containers ?obj2) (open ?obj2) (next_to ?char ?obj2))
-    (and (holds_lh ?char ?obj1) (containers ?obj2) (open ?obj2) (next_to ?char ?obj2))
-  )
-  :effect (and
-    (obj_inside ?obj1 ?obj2)
-    (when (holds_rh ?char ?obj1) (not (holds_rh ?char ?obj1)))
-    (when (holds_lh ?char ?obj1) (not (holds_lh ?char ?obj1)))
-    ; optional: clear any prior on-top relation
-    (forall (?s - object) (when (obj_ontop ?obj1 ?s) (not (obj_ontop ?obj1 ?s))))
-  )
-)
-
-; simple gesture example
 (:action bow
   :parameters (?char - character ?target - character)
-  :precondition (next_to ?char ?target)
+  :precondition (and
+    (next_to ?char ?target)  ; The character must be next to the target to perform the bow
+  )
   :effect ()
 )
+This case illustrates the action can have no effect (or no precondition.)
 
 hint:
-1. Precondition shape: Use DNF (an OR of AND groups). If only one case, a single AND group is enough.
-2. Effects: Only use and, not, when, forall. Do NOT use or or exists in effects. Avoid empty (and). If an action truly has no precondition, write :precondition ().
-3. Keep movement semantics simple: walk_towards must only assert (next_to ?char ?obj). Do NOT modify inside/inside_room in movement actions.
-4. switch_on should require (has_switch ?obj) (off ?obj) (next_to ?char ?obj) and (plugged_in ?obj) when power is needed; do NOT require unrelated facts like (closed ?obj).
-5. Maintain invariants: when you grab, you should not leave the object both held and placed. Use targeted conditional deletions (bounded forall with when) tied to the acted-on object; avoid global, unconstrained cleanups.
-6. You MUST only use predicates and object types exactly as they appear in the domain file at the beginning.
-7. Use and only use the arguments provided in :parameters for each action. Don't propose additional parameters; quantifiers (exists/forall) are fine inside conditions where allowed.
-8. It is possible that an action has no precondition or no effect; if so, keep it empty with ().
-9. The KEY of the task is to ensure the goal is reachable from the init using your actions. Be minimal and consistent to reduce search timeouts.
-10. When there is only one predicate, do not wrap it in logic connectives.
+1. Don't enforce the use of WHEN everywhere.
+
+2. You MUST only use predicates and object types exactly as they appear in the domain file at the beginning.
+
+3. Use and only use the arguments provided in :parameters for each action. Don't propose additional arguments, unless you are using exists or forall.
+
+4. It is possible that action has no precondition or effect.
+
+5. The KEY of the task is to ensure after executing your proposed actions in some order, the intial state (:init) in problem file can reach the goals (:goal)!!! Pay attention to the initial state and final goals in problem file.
+
+6. Preconditions and effects are <Clause> defined above. When there is only one predicate, do not use logic connectives.
 
 For actions to be finished, write their preconditions and effects, and return in standard PDDL format:
 (:action [action name]
   :parameters ([action parameters])
   :precondition ([action precondition])
-  :effect ([action effect]) 
+  :effect ([action effect])
 )
 Concatenate all actions PDDL string into a single string. Output in json format where key is "output" and value is your output string: {"output": YOUR OUTPUT STRING}
 
@@ -273,4 +320,4 @@ Output:
 """
 
 if __name__ == "__main__":
-    pass
+  pass
