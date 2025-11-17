@@ -61,13 +61,15 @@ class FD(PDDLPlanner):
 
     def _get_cmd_str(self, dom_file, prob_file, timeout):
         sas_file = tempfile.NamedTemporaryFile(delete=False).name
+        plan_file = tempfile.NamedTemporaryFile(delete=False).name
         timeout_cmd = "gtimeout" if sys.platform == "darwin" else "timeout"
-        cmd_str = "{} {} {} {} --sas-file {} {} {} {}".format(
+        cmd_str = "{} {} {} {} --sas-file {} --plan-file {} {} {} {}".format(
             timeout_cmd,
             timeout,
             self._exec,
             self._alias_flag,
             sas_file,
+            plan_file,
             dom_file,
             prob_file,
             self._final_flags,
