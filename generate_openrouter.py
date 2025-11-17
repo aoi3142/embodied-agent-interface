@@ -26,6 +26,7 @@ end = None  # Set to None to process all prompts, or set to a positive integer t
 # output_dir = f"submission_v2/sample_submission"
 output_dir = f"testing/sample_submission"
 os.makedirs(output_dir, exist_ok=True)
+output_json = "{output_dir}/{env}_{task}_outputs.json"
 
 # Specify OpenRouter Model
 # model = "Qwen/Qwen3-235B-A22B-Thinking-2507"
@@ -99,6 +100,9 @@ payload = {
     }
 }
 
+# Global thread pool executor for non-blocking I/O operations
+_io_executor = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="io_worker")
+
 def wait_for_url_to_be_up(url: str, timeout: int = 5, retry_interval: int = 1):
     """
     Check if the URL is up and accessible. 
@@ -133,14 +137,16 @@ def wait_for_url_to_be_up(url: str, timeout: int = 5, retry_interval: int = 1):
             print(f"\rWaiting for {check_url}... {spinner[spinner_idx % len(spinner)]}", end='', flush=True)
             time.sleep(0.1)
 
-async def rate_limited_post(min_limiter, session, url, headers, payload, identifier, delay=1) -> Optional[dict]:
+async def rate_limited_post(min_limiter, session, url, headers, payload, identifier, delay=1) -> dict:
     async with min_limiter:
         try:
             async with session.post(url, headers=headers, json=payload) as response:
 
                 completion = await response.json()
-                if response.status == 429:  # Rate limit by cerebras
-                    raise ValueError(f"Rate limited: {await response.text()}")
+                if response.status == 429:  # Rate limit
+                    raise ValueError(f"Rate limited")
+                if response.status == 503:  # Provider not available
+                    raise ValueError(f"Provider not available")
                 if response.status == 500:
                     raise ValueError(f"Server error 500: {await response.text()}")
                 if response.status != 200:
@@ -149,20 +155,20 @@ async def rate_limited_post(min_limiter, session, url, headers, payload, identif
                     raise ValueError("No choices in response.")
                 if completion["choices"][0]['finish_reason'] == "length":
                     # tqdm.write(f"Warning: Completion for prompt {identifier} finished due to max token length.")
-                    return None
+                    return {}
 
                 return completion
 
         except KeyboardInterrupt:
-            return None
+            return {}
 
         except Exception as e:
-            tqdm.write(f"Error for prompt {identifier}: {type(e).__name__}: {e}")
+            tqdm.write(f"Error for prompt {identifier}: {type(e).__name__}: {e}, ", end='')
             delay *= 2  # Exponential backoff
             if delay >= 2**MAX_NO_RESPONSE_RETRIES:   # return None
-                tqdm.write(f"Prompt {identifier}, exceeded max response retries, returning empty output")
-                return None
-            tqdm.write(f"Error for prompt {identifier}, sleeping for {delay} seconds")
+                tqdm.write(f"exceeded max response retries, returning empty output")
+                return {}
+            tqdm.write(f"sleeping for {delay} seconds")
             await asyncio.sleep(delay)  # Async sleep
             return await rate_limited_post(min_limiter, session, url, headers, payload, identifier, delay)
 
@@ -189,14 +195,14 @@ async def ask(session, min_limiter, identifier, env, task, messages, schema, pos
             curr_payload["response_format"] = {"type": "json_object"}
 
     completion = await rate_limited_post(min_limiter, session, url, headers, curr_payload, identifier, delay=1)
-    if completion is None:
-        tqdm.write(f"Returning empty output for prompt {identifier}")
-        return {"identifier": identifier, "llm_output": "", "reasoning": ""}, {}
-
-    content = completion['choices'][0]['message']['content'].strip()
-    reasoning_trace = ""
-    if 'reasoning' in completion['choices'][0]['message']:
+    try:
+        content = completion['choices'][0]['message']['content'].strip()
+    except Exception:
+        content = ""
+    try:
         reasoning_trace = completion['choices'][0]['message']['reasoning']
+    except Exception:
+        reasoning_trace = ""
     if reasoning_trace == "":
         # if "<think>" not in content:
         #     pass
@@ -204,15 +210,30 @@ async def ask(session, min_limiter, identifier, env, task, messages, schema, pos
             content = content.rsplit("</think>", 1)
             reasoning_trace = content[0].strip()
             content = content[-1].strip()
-        elif expect_reasoning:
-            # Deal with completion not containing end of reasoning (likely backend failure)
-            if no_output_retries > 0:
-                tqdm.write(f"No end of reasoning token for prompt {identifier}, retrying ({no_output_retries} retries left)...")
-                no_output_retries -= 1
-                await asyncio.sleep(2 * (MAX_NO_OUTPUT_RETRIES - no_output_retries))  # Async sleep
-                return await ask(session, min_limiter, identifier, env, task, messages, schema, post_processing, no_output_retries, reflexion_round)
-            else:
-                return {"identifier": identifier, "llm_output": content.strip(), "reasoning": ""}, completion
+    try:
+        print_content = json.loads(content)
+    except Exception:
+        content = ""
+        reasoning_trace = ""
+        print_content = {}
+    if task == "transition_modeling":
+        try:
+            print_content = print_content["output"]
+        except Exception:
+            content = ""
+            reasoning_trace = ""
+            print_content = content
+    else:
+        print_content = content
+    if (expect_reasoning and reasoning_trace == "") or content == "":
+        # Deal with completion not containing end of reasoning (likely backend failure)
+        if no_output_retries > 0:
+            tqdm.write(f"No output for prompt {identifier}, retrying ({no_output_retries} retries left)...")
+            no_output_retries -= 1
+            await asyncio.sleep(2 * (MAX_NO_OUTPUT_RETRIES - no_output_retries))  # Async sleep
+            return await ask(session, min_limiter, identifier, env, task, messages, schema, post_processing, no_output_retries, reflexion_round)
+        else:
+            return {"identifier": identifier, "llm_output": content.strip(), "reasoning": ""}, completion
 
     if reflexion_round < MAX_REFLEXION_ROUNDS:
         reflexion_round += 1
@@ -230,14 +251,25 @@ async def ask(session, min_limiter, identifier, env, task, messages, schema, pos
         return new_results, {"reflexion_completion": new_completions, "original_completion": completion}
 
     content = post_processing(content)
-    tokens_generated = completion["usage"]["completion_tokens"]
-    tqdm.write("_" * 20 + "\n" + f"{env} {task} {identifier} (tokens: {tokens_generated})" + "\n\n" + content)
+    try:
+        tokens_input = completion["usage"]["prompt_tokens"]
+    except KeyError:
+        tokens_input = 0
+    try:
+        tokens_generated = completion["usage"]["completion_tokens"]
+    except KeyError:
+        tokens_generated = 0
+    try:
+        provider = f"({completion['provider']})"
+    except KeyError:
+        provider = ""
+    tqdm.write("_" * 20 + "\n" + f"{env} {task} {identifier} (tokens: {tokens_input}|{tokens_generated}){provider}" + "\n\n" + print_content + "\n")
     return {"identifier": identifier, "llm_output": content, "reasoning": reasoning_trace}, completion
 
 async def process_env_task(session, min_limiter, env, task, schema, postprocessing):
     """Process a single environment-task combination"""
     tqdm.write(f"Processing {env} - {task}")
-    out_json = f"{output_dir}/{env}_{task}_outputs.json"
+    out_json = output_json.format(output_dir=output_dir, env=env, task=task)
     completions_pkl = f"{output_dir}/{env}_{task}_completions.pkl"
     prompt_file = prompts_file.format(env=env, task=task)
 
@@ -418,4 +450,8 @@ if __name__ == "__main__":
     payload["model"] = model
     tqdm.write(f"Using model: {model} on URL: {url}")
     # Run the main function directly (no longer async)
-    main()
+    try:
+        main()
+    finally:
+        # Shutdown the IO executor without waiting for background tasks
+        _io_executor.shutdown(wait=False)
