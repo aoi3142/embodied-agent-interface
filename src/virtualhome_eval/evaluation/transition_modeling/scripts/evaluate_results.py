@@ -113,13 +113,19 @@ def worker_process(args):
 
     planner = FD()
 
+    extra_logs = {"gold_action": {}}
+
     for action_name, action_dict in predicted_action.items():
         results["total_predict_action_num"] += 1
         if action_name not in gold_actions_name:
             results["hallucination_num"] += 1
+            if "hallucinations" not in extra_logs:
+                extra_logs["hallucinations"] = []
+            extra_logs["action_not_in_problem"].append(action_name)
             continue
 
         gold_action = gold_actions[action_name]
+        extra_logs["gold_action"][action_name] = gold_action
 
         # Calculate logic scores
         (
@@ -154,12 +160,22 @@ def worker_process(args):
             results["precond_predicate_type_res"][pred2category[pred]][1] += 1
             results["precond_action_type"][action_name][1] += 1
             results["precond_predicate_score"][pred][1] += 1
+            if "extraneous_precondition" not in extra_logs:
+                extra_logs["extraneous_precondition"] = {}
+            if action_name not in extra_logs["extraneous_precondition"]:
+                extra_logs["extraneous_precondition"][action_name] = []
+            extra_logs["extraneous_precondition"][action_name].append(pred)
         for pred in unmatched_gold_precond:
             if pred == "()":
                 continue
             results["precond_predicate_type_res"][pred2category[pred]][2] += 1
             results["precond_action_type"][action_name][2] += 1
             results["precond_predicate_score"][pred][2] += 1
+            if "missing_precondition" not in extra_logs:
+                extra_logs["missing_precondition"] = {}
+            if action_name not in extra_logs["missing_precondition"]:
+                extra_logs["missing_precondition"][action_name] = []
+            extra_logs["missing_precondition"][action_name].append(pred)
 
         # record effect
         for pred in matched_effect:
@@ -176,12 +192,22 @@ def worker_process(args):
             results["effect_predicate_type_res"][pred2category[pred]][1] += 1
             results["effect_action_type"][action_name][1] += 1
             results["effect_predicate_score"][pred][1] += 1
+            if "extraneous_effect" not in extra_logs:
+                extra_logs["extraneous_effect"] = {}
+            if action_name not in extra_logs["extraneous_effect"]:
+                extra_logs["extraneous_effect"][action_name] = []
+            extra_logs["extraneous_effect"][action_name].append(pred)
         for pred in unmatched_gold_effect:
             if pred == "()":
                 continue
             results["effect_predicate_type_res"][pred2category[pred]][2] += 1
             results["effect_action_type"][action_name][2] += 1
             results["effect_predicate_score"][pred][2] += 1
+            if "missing_effect" not in extra_logs:
+                extra_logs["missing_effect"] = {}
+            if action_name not in extra_logs["missing_effect"]:
+                extra_logs["missing_effect"][action_name] = []
+            extra_logs["missing_effect"][action_name].append(pred)
 
     # Planner success rate and sensitivity analysis
     for category_name in category_name_list:
@@ -205,9 +231,11 @@ def worker_process(args):
         for category_name in category_name_list:
             results["success_by_task_type"][category_name][0] += 1
         logger.info(f"Holistic test: task {file_id} succeeded")
+        logger.info(f"Extra logs: {extra_logs}")
     except Exception as e:
         logger.info(f"Holistic test: task {file_id} failed")
-        logger.info(f"Error: {e}")
+        # logger.info(f"Error: {e}")
+        logger.info(f"Extra logs: {extra_logs}")
 
     # Return the results and log output
     return results, log_capture_string.getvalue()
@@ -215,7 +243,7 @@ def worker_process(args):
 
 def evaluate_results(args):
     dataset = args.dataset
-    num_workers = 32
+    num_workers = 128
     output_dir = args.output_dir
 
     if dataset == "virtualhome":
@@ -291,7 +319,7 @@ def evaluate_results(args):
         ]
 
         # Run worker processes
-        results = pool.map(worker_process, worker_args)
+        results = list(pool.map(worker_process, worker_args))
 
         # Combine results and logs
         combined_log = StringIO()
@@ -432,6 +460,7 @@ def evaluate_results(args):
         logger.info(
             f"Hallucinations: {combined_results['hallucination_num']}, rate={100.*combined_results['hallucination_num']/combined_results['total_predict_action_num']:.2f}%"
         )
+        breakpoint()
 
         logger.info("Precondition predicate type results:")
         print_precision_recall_f1(precond_predicate_type_res_dict)
