@@ -6,7 +6,10 @@ from multiprocessing import Process, Manager, Queue
 import behavior_eval
 from behavior_eval.evaluation.action_sequencing.action_sequence_evaluator import ActionSequenceEvaluator
 from behavior_eval.evaluation.subgoal_decomposition.subgoal_prompts_utils import get_subgoal_prompt
+from behavior_eval.evaluation.subgoal_decomposition.resources.prompt_template.meta_prompt import get_meta_prompt_component
 
+with open(behavior_eval.demo_stats_path, "r") as f:
+    demo_stats = json.load(f)
 
 def get_llm_output(demo_name, result_list, lock, output_path):
     with lock:
@@ -17,12 +20,26 @@ def get_llm_output(demo_name, result_list, lock, output_path):
                 if log_list['identifier'] == demo_name:
                     print(f'Demo {demo_name} has been processed before.')
                     return
-    env = ActionSequenceEvaluator(demo_name=demo_name)
-    try:
-        prompt = get_subgoal_prompt(env)
-    except:
-        raise Exception(f"Failed to generate prompt for {demo_name}")
-    env.transition_model.env.close()
+    task_name = demo_stats[demo_name]["task"]
+    os.makedirs(f"output/behavior/generate_prompts/subgoal_decomposition/cache/", exist_ok=True)
+    cache_path = f"output/behavior/generate_prompts/subgoal_decomposition/cache/{task_name}.json"
+    if os.path.exists(cache_path):
+        with open(cache_path, 'r') as f:
+            cache_data = json.load(f)
+        relevant_objects = cache_data['relevant_objects']
+        initial_states = cache_data['initial_states']
+        goal_states = cache_data['goal_states']
+        prompt_components = get_meta_prompt_component()
+        task_prompt = prompt_components['target_task']
+        task_prompt = task_prompt.replace('<task_name>', task_name).replace('<relevant_objects>', relevant_objects).replace('<initial_states>', initial_states).replace('<goal_states>', goal_states)
+        prompt = prompt_components['system_prompt'] + "\n\n" + task_prompt
+    else:
+        env = ActionSequenceEvaluator(demo_name=demo_name)
+        try:
+            prompt = get_subgoal_prompt(env)
+        except:
+            raise Exception(f"Failed to generate prompt for {demo_name}")
+        env.transition_model.env.close()
     rst = {
         "identifier": demo_name,
         "llm_prompt": prompt,

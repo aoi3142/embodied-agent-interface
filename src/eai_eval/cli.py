@@ -36,8 +36,8 @@ def main():
     parser.add_argument(
         "--num-workers",
         type=int,
-        default=4,
-        help="Number of workers for multiprocessing (default: 4)",
+        default=32,
+        help="Number of workers for multiprocessing (default: 32)",
     )
     parser.add_argument(
         "--dataset",

@@ -80,7 +80,17 @@ def get_subgoal_prompt(env: ActionSequenceEvaluator):
     s_tl_goal_conditions = []
     s_tl_goal_conditions = translate_bddl_final_states_into_simplified_tl(name_mapping, tl_category_map, env.task.goal_conditions)
     task_prompt = prompt_components['target_task']
-    task_prompt = task_prompt.replace('<task_name>', task_name).replace('<relevant_objects>', '\n'.join(tl_objs)).replace('<initial_states>', '\n'.join(tl_exps)).replace('<goal_states>', '\n'.join(s_tl_goal_conditions))
+    relevant_objects = '\n'.join(tl_objs)
+    initial_states = '\n'.join(tl_exps)
+    goal_states = '\n'.join(s_tl_goal_conditions)
+    task_prompt = task_prompt.replace('<task_name>', task_name).replace('<relevant_objects>', relevant_objects).replace('<initial_states>', initial_states).replace('<goal_states>', goal_states)
+    with open(f"output/behavior/generate_prompts/subgoal_decomposition/cache/{task_name}.json", 'w') as f:
+        json.dump({
+            "relevant_objects": relevant_objects,
+            "initial_states": initial_states,
+            "goal_states": goal_states
+        }, f, indent=2
+        )
     
     input_prompt = prompt_components['system_prompt'] + "\n\n" + task_prompt
     return input_prompt

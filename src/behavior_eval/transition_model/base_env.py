@@ -5,10 +5,11 @@ import igibson
 import behavior_eval
 import json
 
+with open(behavior_eval.demo_stats_path, "r") as f:
+    demo_stats = json.load(f)
+
 class BaseEnv:
     def defalt_init(self,demo_name):
-        with open(behavior_eval.demo_stats_path, "r") as f:
-            demo_stats = json.load(f)
         task=demo_stats[demo_name]["task"]
         task_id=demo_stats[demo_name]["task_id"]
         scene_id=demo_stats[demo_name]["scene_id"]

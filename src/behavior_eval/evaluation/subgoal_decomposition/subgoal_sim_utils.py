@@ -8,6 +8,9 @@ from behavior_eval.evaluation.subgoal_decomposition.checkers import Vocab, Synta
 from behavior_eval.evaluation.subgoal_decomposition.state_action_translator import StateActionTranslator
 from behavior_eval.tl_formula.bddl_to_tl import translate_addressable_obj_into_tl_obj, translate_tl_obj_into_addressable_obj
 
+with open(behavior_eval.demo_stats_path, "r") as f:
+    demo_stats = json.load(f)
+
 class EvalStatistics:
     def __init__(self, task_list: List[str], log_path: str) -> None:
         self.task_list = task_list
@@ -48,6 +51,11 @@ class EvalStatistics:
 
 class EvalSubgoalPlan:
     def __init__(self, demo_path:str, plan_path:str, json_format:Optional[bool]=False) -> None:
+        task_name = demo_stats[demo_path]["task"]
+        try:
+            self.subgoal_plan = SubgoalPlanHalfJson(plan_path, task_name)
+        except Exception as e:
+            raise e
         self.env = EvalGraphEnv(demo_name=demo_path)
         self.igibson_name_mapping = self.env.get_name_mapping()
         self.igibson_relevant_objects = self.env.get_relevant_obj_list(self.igibson_name_mapping)
@@ -56,10 +64,6 @@ class EvalSubgoalPlan:
         self.tl_relevant_objects = [obj['name'] for obj in self.tl_name_mapping]
         self.task_name = self.env.task.behavior_activity #type:ignore
         # self.subgoal_plan = SubgoalPlanPlain(plan_path, self.task_name) if not json_format else SubgoalPlanJSON(plan_path, self.task_name)
-        try:
-            self.subgoal_plan = SubgoalPlanHalfJson(plan_path, self.task_name)
-        except Exception as e:
-            raise e
     
     def get_tl_category(self, igibson_name_mapping:List[Dict[str, str]]) -> Dict[str, str]:
         category_map = {}
