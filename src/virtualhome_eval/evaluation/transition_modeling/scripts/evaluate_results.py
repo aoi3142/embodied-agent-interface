@@ -113,7 +113,7 @@ def worker_process(args):
 
     planner = FD()
 
-    extra_logs = {"gold_action": {}}
+    extra_logs = {"gold_action": {}, "action_not_in_problem": [], "hallucinations": []}
 
     for action_name, action_dict in predicted_action.items():
         results["total_predict_action_num"] += 1
@@ -235,10 +235,10 @@ def worker_process(args):
     except Exception as e:
         logger.info(f"Holistic test: task {file_id} failed")
         # logger.info(f"Error: {e}")
-        logger.info(f"Extra logs: {extra_logs}")
+        # logger.info(f"Extra logs: {extra_logs}")
 
     # Return the results and log output
-    return results, log_capture_string.getvalue()
+    return results, log_capture_string.getvalue(), extra_logs
 
 
 def evaluate_results(args):
@@ -341,7 +341,7 @@ def evaluate_results(args):
             "total_predict_action_num": 0,
         }
 
-        for result, log_output in results:
+        for result, log_output, _ in results:
             if result is not None:
                 if result["format_wrong_num"] == 1:
                     combined_results["format_wrong_num"] += 1
@@ -460,7 +460,6 @@ def evaluate_results(args):
         logger.info(
             f"Hallucinations: {combined_results['hallucination_num']}, rate={100.*combined_results['hallucination_num']/combined_results['total_predict_action_num']:.2f}%"
         )
-        breakpoint()
 
         logger.info("Precondition predicate type results:")
         print_precision_recall_f1(precond_predicate_type_res_dict)
@@ -530,7 +529,7 @@ def evaluate_results(args):
             json.dump(summary, f, indent=4)
             logger.info(f"Evaluation results of {model_name} saved to {save_path}")
         with open(osp.join(save_path, "error_info.json"), "w") as f:
-            json.dump({k["identifier"]:v[1] for k,v in zip(llm_response, results)}, f, indent=4)
+            json.dump({k["identifier"]:{"Output":v[1], "Logs":v[2]} for k,v in zip(llm_response, results)}, f, indent=4)
             logger.info(f"Error info of {model_name} saved to {save_path}")
 
     return all_results

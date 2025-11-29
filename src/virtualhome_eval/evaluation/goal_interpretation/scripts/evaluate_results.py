@@ -112,9 +112,6 @@ def evaluate_results(args):
             gold_node_goals = remove_duplicate_dicts(gold_node_goals)
             gold_edge_goals = remove_duplicate_dicts(gold_edge_goals)
             gold_action_goals = list(set(gold_action_goals))
-            curr_detailed_analysis["gold_node_goals"] = gold_node_goals
-            curr_detailed_analysis["gold_edge_goals"] = gold_edge_goals
-            curr_detailed_analysis["gold_action_goals"] = gold_action_goals
 
             output = output_dict["llm_output"]
             # if llm output starts with ```json
@@ -151,8 +148,13 @@ def evaluate_results(args):
             )
             relevant_nodes_ids = motion_planner.get_relevant_nodes(script_id=file_id)
             name_to_id = {}
+            id_to_name = {}
             for tup in relevant_nodes_ids:
                 name_to_id[tup[0]] = tup[1]
+                id_to_name[tup[1]] = tup[0]
+            curr_detailed_analysis["gold_node_goals"] = [{"name": i["class_name"], "state": i["state"]} for i in gold_node_goals]
+            curr_detailed_analysis["gold_edge_goals"] = [{"from_name": id_to_name[i["from_id"]], "relation": i["relation_type"], "to_name": id_to_name[i["to_id"]]} for i in gold_edge_goals]
+            curr_detailed_analysis["gold_action_goals"] = gold_action_goals
 
             logger.info(f"predicted {output=}")
             pred_node_goals = output.get("node goals", [])
@@ -197,10 +199,10 @@ def evaluate_results(args):
                 logger.info(indexed_node_goals)
                 if indexed_node_goals in gold_node_goals:
                     delta_TP_node_goals += 1
-                    curr_detailed_analysis["correct_node_goal"].append(indexed_node_goals)
+                    curr_detailed_analysis["correct_node_goal"].append(node_goal)
                 else:
-                    curr_detailed_analysis["incorrect_node_goal"].append(indexed_node_goals)
-                    curr_detailed_analysis["error"].append(f"incorrect node goal: {indexed_node_goals}")
+                    curr_detailed_analysis["incorrect_node_goal"].append(node_goal)
+                    curr_detailed_analysis["error"].append(f"incorrect node goal: {node_goal}")
                     delta_FP_node_goals += 1
             delta_FN_node_goals += len(gold_node_goals) - delta_TP_node_goals
             total_node_goals += delta_TP_node_goals + delta_FP_node_goals
@@ -249,11 +251,11 @@ def evaluate_results(args):
                 }
                 logger.info(indexed_edge_goals)
                 if indexed_edge_goals in gold_edge_goals:
-                    curr_detailed_analysis["correct_edge_goal"].append(indexed_edge_goals)
+                    curr_detailed_analysis["correct_edge_goal"].append(edge_goal)
                     delta_TP_edge_goals += 1
                 else:
-                    curr_detailed_analysis["incorrect_edge_goal"].append(indexed_edge_goals)
-                    curr_detailed_analysis["error"].append(f"incorrect edge goal: {indexed_edge_goals}")
+                    curr_detailed_analysis["incorrect_edge_goal"].append(edge_goal)
+                    curr_detailed_analysis["error"].append(f"incorrect edge goal: {edge_goal}")
                     delta_FP_edge_goals += 1
             delta_FN_edge_goals += len(gold_edge_goals) - delta_TP_edge_goals
             total_edge_goals += delta_TP_edge_goals + delta_FP_edge_goals
@@ -312,6 +314,18 @@ def evaluate_results(args):
             logger.info(
                 f"TP_action_goals: {delta_TP_acion_goals}, FP_action_goals: {delta_FP_action_goals}, FN_action_goals: {delta_FN_action_goals}"
             )
+            curr_node_precision, curr_node_recall, curr_node_f1 = precision_recall_f1(
+                delta_TP_node_goals, delta_FP_node_goals, delta_FN_node_goals
+            )
+            curr_edge_precision, curr_edge_recall, curr_edge_f1 = precision_recall_f1(
+                delta_TP_edge_goals, delta_FP_edge_goals, delta_FN_edge_goals
+            )
+            curr_action_precision, curr_action_recall, curr_action_f1 = precision_recall_f1(
+                delta_TP_acion_goals, delta_FP_action_goals, delta_FN_action_goals
+            )
+            curr_detailed_analysis["node_stats"] = {"precision": curr_node_precision, "recall": curr_node_recall, "f1": curr_node_f1}
+            curr_detailed_analysis["edge_stats"] = {"precision": curr_edge_precision, "recall": curr_edge_recall, "f1": curr_edge_f1}
+            curr_detailed_analysis["action_stats"] = {"precision": curr_action_precision, "recall": curr_action_recall, "f1": curr_action_f1}
 
         node_precision, node_recall, node_f1 = precision_recall_f1(
             TP_node_goals, FP_node_goals, FN_node_goals
