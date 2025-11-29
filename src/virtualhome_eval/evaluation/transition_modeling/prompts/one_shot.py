@@ -103,18 +103,18 @@ Problem file:
     character - character
     shirt - object
     hanger - object
-  ) ; This section declares the instances needed for the problem: character is an instance of a character; shirt is an instance of an object classified as clothes; hanger is an object that is suitable for hanging clothes.
+  )  ; This section declares the instances needed for the problem: character is an instance of a character; shirt is an instance of an object classified as clothes; hanger is an object that is suitable for hanging clothes.
   (:init
     (clothes shirt)
     (hangable hanger)
     (holds_rh alice shirt)
     (next_to alice hanger)
-  ) ; This section declares the initial conditions. (clothes shirt) and (hangable hanger) tells the properties of objects; (holds_rh alice shirt) indicates that Alice is holding the shirt in her right hand; (next_to alice hanger) means Alice is next to the hanger, ready to hang the shirt.
+  )  ; This section declares the initial conditions. (clothes shirt) and (hangable hanger) tells the properties of objects; (holds_rh alice shirt) indicates that Alice is holding the shirt in her right hand; (next_to alice hanger) means Alice is next to the hanger, ready to hang the shirt.
   (:goal
     (and
       (ontop shirt hanger)
     )
-  ) ; This section declares the goal.  (ontop shirt hanger) is the goal, where the shirt should end up hanging on the hanger.
+  )  ; This section declares the goal.  (ontop shirt hanger) is the goal, where the shirt should end up hanging on the hanger.
 )
 Action to be finished:
 (:action hang_up_clothes
@@ -126,27 +126,27 @@ Action to be finished:
 Example output:
 Given the objects in the problem file, and what typically needs to be true to perform an action like hanging up clothes: 1. clothes must indeed be a type of clothing. 2. hang_obj should be something on which clothes can be hung (hangable). 3. char should be holding the clothes, either in the right or left hand. 4. char needs to be next to the hanging object to hang the clothes. Besides, we need to write preconditions in Disjunctive Normal Form.
 These insights guide us to write:
-:precondition (or
-  (and
-    (clothes ?clothes)  ; the object must be a piece of clothing
-    (hangable ?hang_obj)  ; the target must be an object suitable for hanging clothes
-    (holds_rh ?char ?clothes)  ; character is holding clothes in the right hand
-    (next_to ?char ?hang_obj)  ; character is next to the hanging object
+  :precondition (or
+    (and
+      (clothes ?clothes)  ; the object must be a piece of clothing
+      (hangable ?hang_obj)  ; the target must be an object suitable for hanging clothes
+      (holds_rh ?char ?clothes)  ; character is holding clothes in the right hand
+      (next_to ?char ?hang_obj)  ; character is next to the hanging object
+    )
+    (and
+      (clothes ?clothes)  ; the object must be a piece of clothing
+      (hangable ?hang_obj)  ; the target must be an object suitable for hanging clothes
+      (holds_lh ?char ?clothes)  ; character is holding clothes in the left hand
+      (next_to ?char ?hang_obj)  ; character is next to the hanging object
+    )
   )
-  (and
-    (clothes ?clothes)  ; the object must be a piece of clothing
-    (hangable ?hang_obj)  ; the target must be an object suitable for hanging clothes
-    (holds_lh ?char ?clothes)  ; character is holding clothes in the left hand
-    (next_to ?char ?hang_obj)  ; character is next to the hanging object
-  )
-)
 Effects describe how the world state changes due to the action. After hanging up clothes, you'd expect: 1. char is no longer holding the clothes. 2. clothes is now on the hang_obj.
 These expectations convert into effects:
-:effect (and
-  (when (holds_rh ?char ?clothes)(not (holds_rh ?char ?clothes)))  ; if clothes are held in the right hand, they are no longer held
-  (when (holds_lh ?char ?clothes)(not (holds_lh ?char ?clothes)))  ; if clothes are held in the left hand, they are no longer held
-  (ontop ?clothes ?hang_obj)  ; clothes are now hanging on the object
-)
+  :effect (and
+    (when (holds_rh ?char ?clothes) (not (holds_rh ?char ?clothes)))  ; if clothes are held in the right hand, they are no longer held
+    (when (holds_lh ?char ?clothes) (not (holds_lh ?char ?clothes)))  ; if clothes are held in the left hand, they are no longer held
+    (ontop ?clothes ?hang_obj)  ; clothes are now hanging on the object
+  )
 
 Combining these parts, the complete hang_up_clothes action becomes:
 (:action hang_up_clothes
@@ -166,8 +166,8 @@ Combining these parts, the complete hang_up_clothes action becomes:
     )
   )
   :effect (and
-    (when (holds_rh ?char ?clothes)(not (holds_rh ?char ?clothes)))
-    (when (holds_lh ?char ?clothes)(not (holds_lh ?char ?clothes)))
+    (when (holds_rh ?char ?clothes) (not (holds_rh ?char ?clothes)))
+    (when (holds_lh ?char ?clothes) (not (holds_lh ?char ?clothes)))
     (ontop ?clothes ?hang_obj)
   )
 )
@@ -186,52 +186,131 @@ Above is a good example of given predicates in domain file, problem file, action
 9. Unnecessary negatives: Avoid (not (next_to ...)) in preconditions unless logic demands absence; most movement just asserts new proximity.
 10. Power actions: For switch_on include (has_switch ?obj) (off ?obj) (plugged_in ?obj) (next_to ?char ?obj) then set (on ?obj) and remove (off ?obj).
 
-=== CANONICAL ACTION TEMPLATES (ADAPT VARIABLE NAMES) ===
+=== CANONICAL ACTION TEMPLATES (ADAPT VARIABLE NAMES. COPY EXACTLY WHENEVER POSSIBLE. DO NOT ADD OR REMOVE PREDICATES) ===
 walk_towards:
-  :precondition (and (not (sitting ?char)) (not (lying ?char)))
-  :effect (and (next_to ?char ?obj) (forall (?far_obj - object) (when (not (obj_next_to ?far_obj ?obj)) (not (next_to ?char ?far_obj)))) (forall (?close_obj - object) (when (obj_next_to ?close_obj ?obj) (next_to ?char ?close_obj))))
+  :precondition (and
+    (not (sitting ?char)) (not (lying ?char))
+  )
+  :effect (and
+    (next_to ?char ?obj) (forall (?far_obj - object) (when (not (obj_next_to ?far_obj ?obj)) (not (next_to ?char ?far_obj)))) (forall (?close_obj - object) (when (obj_next_to ?close_obj ?obj) (next_to ?char ?close_obj)))
+  )
 switch_on:
-  :precondition (and (has_switch ?obj) (off ?obj) (plugged_in ?obj) (next_to ?char ?obj))
-  :effect (and (on ?obj) (not (off ?obj)))
+  :precondition (and
+    (has_switch ?obj) (off ?obj) (plugged_in ?obj) (next_to ?char ?obj)
+  )
+  :effect (and
+    (on ?obj) (not (off ?obj))
+  )
 switch_off:
-  :precondition (and (has_switch ?obj) (on ?obj) (next_to ?char ?obj))
-  :effect (and (off ?obj) (not (on ?obj)))
+  :precondition (and
+    (has_switch ?obj) (on ?obj) (next_to ?char ?obj)
+  )
+  :effect (and
+    (off ?obj) (not (on ?obj))
+  )
 grab:
-  :precondition (and (grabbable ?obj) (next_to ?char ?obj) (not (exists (?obj2 - object) (and (obj_inside ?obj ?obj2) (closed ?obj2)))) (not (and (exists (?obj3 - object) (holds_lh ?char ?obj3)) (exists (?obj4 - object) (holds_rh ?char ?obj4)))))
-  :effect (and (when (exists (?obj3 - object) (holds_lh ?char ?obj3)) (holds_rh ?char ?obj)) (when (exists (?obj4 - object) (holds_rh ?char ?obj4)) (holds_lh ?char ?obj)) (when (not (and (exists (?obj3 - object) (holds_lh ?char ?obj3)) (exists (?obj4 - object) (holds_rh ?char ?obj4)))) (holds_rh ?char ?obj)) )
+  :precondition (and
+    (grabbable ?obj) (next_to ?char ?obj) (not (exists (?obj2 - object) (and (obj_inside ?obj ?obj2) (closed ?obj2)))) (not (and (exists (?obj3 - object) (holds_lh ?char ?obj3)) (exists (?obj4 - object) (holds_rh ?char ?obj4))))
+  )
+  :effect (and
+    (when (exists (?obj3 - object) (holds_lh ?char ?obj3)) (holds_rh ?char ?obj)) (when (exists (?obj4 - object) (holds_rh ?char ?obj4)) (holds_lh ?char ?obj)) (when (not (and (exists (?obj3 - object) (holds_lh ?char ?obj3)) (exists (?obj4 - object) (holds_rh ?char ?obj4)))) (holds_rh ?char ?obj))
+  )
 put_on:
-  :precondition (or (and (next_to ?char ?obj2) (holds_lh ?char ?obj1)) (and (next_to ?char ?obj2) (holds_rh ?char ?obj1)) )
-  :effect (and (obj_next_to ?obj1 ?obj2) (obj_ontop ?obj1 ?obj2) (not (holds_lh ?char ?obj1)) (not (holds_rh ?char ?obj1)))
+  :precondition (or
+    (and (next_to ?char ?obj2) (holds_lh ?char ?obj1)) (and (next_to ?char ?obj2) (holds_rh ?char ?obj1))
+  )
+  :effect (and
+    (obj_next_to ?obj1 ?obj2) (obj_ontop ?obj1 ?obj2) (not (holds_lh ?char ?obj1)) (not (holds_rh ?char ?obj1))
+  )
 put_on_character:
-  :precondition (or (holds_lh ?char ?obj) (holds_rh ?char ?obj))
-  :effect (and (on_char ?obj ?char) (not (holds_lh ?char ?obj)) (not (holds_rh ?char ?obj)))
+  :precondition (or
+    (holds_lh ?char ?obj) (holds_rh ?char ?obj)
+  )
+  :effect (and
+    (on_char ?obj ?char) (not (holds_lh ?char ?obj)) (not (holds_rh ?char ?obj))
+  )
 put_inside:
-  :precondition (or (and (next_to ?char ?obj2) (holds_lh ?char ?obj1) (not (can_open ?obj2))) (and (next_to ?char ?obj2) (holds_lh ?char ?obj1) (open ?obj2)) (and (next_to ?char ?obj2) (holds_rh ?char ?obj1) (not (can_open ?obj2))) (and (next_to ?char ?obj2) (holds_rh ?char ?obj1) (open ?obj2)) )
-  :effect (and (obj_inside ?obj1 ?obj2) (not (holds_lh ?char ?obj1)) (not (holds_rh ?char ?obj1)))
+  :precondition (or
+    (and (next_to ?char ?obj2) (holds_lh ?char ?obj1) (not (can_open ?obj2))) (and (next_to ?char ?obj2) (holds_lh ?char ?obj1) (open ?obj2)) (and (next_to ?char ?obj2) (holds_rh ?char ?obj1) (not (can_open ?obj2))) (and (next_to ?char ?obj2) (holds_rh ?char ?obj1) (open ?obj2))
+  )
+  :effect (and
+    (obj_inside ?obj1 ?obj2) (not (holds_lh ?char ?obj1)) (not (holds_rh ?char ?obj1))
+  )
 open:
-  :precondition (and (can_open ?obj) (closed ?obj) (next_to ?char ?obj) (not (on ?obj)))
-  :effect (and (open ?obj) (not (closed ?obj)))
+  :precondition (and
+    (can_open ?obj) (closed ?obj) (next_to ?char ?obj) (not (on ?obj))
+  )
+  :effect (and
+    (open ?obj) (not (closed ?obj))
+  )
 close:
-  :precondition (and (can_open ?obj) (open ?obj) (next_to ?char ?obj))
-  :effect (and (closed ?obj) (not (on ?obj)))
+  :precondition (and
+    (can_open ?obj) (open ?obj) (next_to ?char ?obj)
+  )
+  :effect (and
+    (closed ?obj) (not (on ?obj))
+  )
 sit:
-  :precondition (and (next_to ?char ?obj) (sittable ?obj) (not (sitting ?char)))
-  :effect (and (sitting ?char) (ontop ?char ?obj))
+  :precondition (and
+    (next_to ?char ?obj) (sittable ?obj) (not (sitting ?char))
+  )
+  :effect (and
+    (sitting ?char) (ontop ?char ?obj)
+  )
 lie:
-  :precondition (and (lieable ?obj) (next_to ?char ?obj) (not (lying ?char)))
-  :effect (and (lying ?char) (ontop ?char ?obj) (not (sitting ?char)))
+  :precondition (and
+    (lieable ?obj) (next_to ?char ?obj) (not (lying ?char))
+  )
+  :effect (and
+    (lying ?char) (ontop ?char ?obj) (not (sitting ?char))
+  )
 standup:
-  :precondition (or (sitting ?char) (lying ?char))
-  :effect (and (not (sitting ?char)) (not (lying ?char)))
+  :precondition (or
+    (sitting ?char) (lying ?char)
+  )
+  :effect (and
+    (not (sitting ?char)) (not (lying ?char))
+  )
 turn_to:
   :precondition ()
   :effect (facing ?char ?obj)
 walk_into:
-  :precondition (and (not (sitting ?char)) (not (lying ?char)))
-  :effect (and (inside ?char ?room) (forall (?far_obj - object) (when (not (inside_room ?far_obj ?room)) (not (next_to ?char ?far_obj)))) )
+  :precondition (and
+    (not (sitting ?char)) (not (lying ?char))
+  )
+  :effect (and
+    (inside ?char ?room) (forall (?far_obj - object) (when (not (inside_room ?far_obj ?room)) (not (next_to ?char ?far_obj))))
+  )
 plug_in:
-  :precondition (or (and (next_to ?char ?obj) (has_plug ?obj) (plugged_out ?obj)) (and (next_to ?char ?obj) (has_switch ?obj) (plugged_out ?obj)) )
-  :effect (and (plugged_in ?obj) (not (plugged_out ?obj)))
+  :precondition (or
+    (and (next_to ?char ?obj) (has_plug ?obj) (plugged_out ?obj)) (and (next_to ?char ?obj) (has_switch ?obj) (plugged_out ?obj))
+  )
+  :effect (and
+    (plugged_in ?obj) (not (plugged_out ?obj))
+  )
+plug_out:
+  :precondition (and
+    (next_to ?char ?obj) (has_plug ?obj) (plugged_in ?obj) (not (on ?obj))
+  )
+  :effect (and
+    (plugged_out ?obj) (not (plugged_in ?obj))
+  )
+pour:
+  :precondition (or
+    (and
+      (pourable ?obj1) (holds_lh ?char ?obj1) (recipient ?obj2) (next_to ?char ?obj2)
+    )
+    (and
+      (pourable ?obj1) (holds_rh ?char ?obj1) (recipient ?obj2) (next_to ?char ?obj2)
+    )
+    (and
+      (drinkable ?obj1) (holds_lh ?char ?obj1) (recipient ?obj2) (next_to ?char ?obj2)
+    )
+    (and
+      (drinkable ?obj1) (holds_rh ?char ?obj1) (recipient ?obj2) (next_to ?char ?obj2)
+    )
+  )
+  :effect (obj_inside ?obj1 ?obj2)
 
 === VALIDATION CHECKLIST ===
 Before final output for each action ensure:
@@ -241,6 +320,7 @@ Before final output for each action ensure:
   D. Hand predicates handled (removed on place, added conditionally on grab).
   E. All goal predicates obtainable (either already in :init or can be produced).
   F. No unnecessary negative proximity or redundant quantifiers.
+  G. Output is bracket-balanced valid PDDL.
 
 === QUANTIFIER GUIDANCE ===
 Use exists/forall only for: conditional hand assignment and movement proximity propagation. Avoid other uses.
@@ -256,28 +336,28 @@ Here are some other commonly used actions and their PDDL definition:
   :parameters (?char - character ?obj - object ?dest - object)
   :precondition (or
     (and
-      (holds_lh ?char ?obj)    ; The character should hold either with left hand or right hand
-      (next_to ?char ?dest) ; The character should be close to destination
+      (holds_lh ?char ?obj)  ; The character should hold either with left hand or right hand
+      (next_to ?char ?dest)  ; The character should be close to destination
     )
     (and
-      (holds_rh ?char ?obj)    ; The character should hold either with left hand or right hand
-      (next_to ?char ?dest) ; The character should be close to destination
+      (holds_rh ?char ?obj)  ; The character should hold either with left hand or right hand
+      (next_to ?char ?dest)  ; The character should be close to destination
     )
   )
-  :effect (obj_ontop ?obj ?dest)    ; The object is now on the destination
+  :effect (obj_ontop ?obj ?dest)  ; The object is now on the destination
 )
 This case illustrates the use of OR to include all possible preconditions of an action.
 
 (:action pick_and_place
   :parameters (?char - character ?obj - object ?dest - object)
   :precondition (and
-    (grabbable ?obj)    ; The object must be grabbable
+    (grabbable ?obj)  ; The object must be grabbable
     (next_to ?char ?obj)  ; The character must be next to the object
     (not (obj_ontop ?obj ?dest)) ; Ensure the object is not already on the destination
   )
   :effect (and
-    (obj_ontop ?obj ?dest)    ; The object is now on the destination
-    (next_to ?char ?dest)     ; The character is now next to the destination
+    (obj_ontop ?obj ?dest)  ; The object is now on the destination
+    (next_to ?char ?dest)  ; The character is now next to the destination
   )
 )
 This case illustrates a plain case with only AND operator.
@@ -285,11 +365,11 @@ This case illustrates a plain case with only AND operator.
 (:action bow
   :parameters (?char - character ?target - character)
   :precondition (and
-    (next_to ?char ?target)  ; The character must be next to the target to perform the bow
+    (next_to ?char ?target)   ; The character must be next to the target to perform the bow
   )
   :effect ()
 )
-This case illustrates the action can have no effect (or no precondition.)
+This case illustrates the action can have no effect (or no precondition).
 
 hint:
 1. Don't enforce the use of WHEN everywhere.

@@ -1,83 +1,307 @@
 prompt="""
-Your primary task is to interpret a natural language goal for a household robot and translate it into a precise symbolic representation that captures the final desired state of the environment. Represent this with:
-- node goals (target object states),
-- edge goals (target object relationships), and
-- action goals (only when the action itself is the objective).
+Your task is to convert natural language goals into symbolic goals with maximal F1 by avoiding extra items and not missing required ones. You must reason about object end states, relationships, and only add actions that are strictly necessary beyond states/relations.
 
-Input: You will receive the goal's name and description, a list of relevant objects with their initial/possible states, all available relationship types, and a list of possible actions.
+Inputs:
+- Goal name and description
+- Relevant objects with initial and possible states
+- Allowed relations and their target objects
 
-Output: Return a single valid JSON object with exactly these keys: {'node goals': [], 'edge goals': [], 'action goals': []}.
+Output JSON must have exactly three keys: 'node goals', 'edge goals', 'action goals'.
 
-Reasoning Process (follow in order):
-1) Identify the core objective: From `goal_str`, determine the final outcome that must be true when the goal is achieved.
-2) Final states (node goals): Add only the minimal set of final object states required by the objective.
-    - Choose states only from each object's `possible states`.
-    - Do not include initial, intermediate, contextual, or posture/location states unless they are explicitly the goal.
-    - Use: {'name': 'object_name', 'state': 'final_state'}.
-3) Final relationships (edge goals): Add required spatial/holding relations that must hold in the final state.
-    - Use only relations in `relation_types` and ensure 'to_name' is allowed by `rel_obj_pairs`.
-    - Use: {'from_name': 'object_A', 'relation': 'RELATION_TYPE', 'to_name': 'object_B'}.
-4) Mandatory actions (action goals): Include only if the action is the explicit objective or cannot be captured by node/edge goals alone.
-    - Examples: TYPE for “Write an email”; TOUCH|PUSH for “Change TV channel”.
-    - Do NOT use actions for navigation/manipulation/posture (WALK, FIND, GRAB, PUTIN, OPEN, CLOSE, SWITCHON/OFF, SIT, LIE) unless the action itself is the goal; prefer node/edge goals for the outcome instead.
-    - Use: {'action': 'ACTION_NAME', 'description': 'brief specific description including target object(s)'}.
+Strict generation rules (follow in order):
+1) Verb-to-state normalization
+    - Map goal verbs to end states whenever possible:
+        • turn on -> target object's state: ON
+        • turn off -> OFF
+        • open -> OPEN, close -> CLOSED
+        • sit/lie -> character end state: SITTING/LYING or relation ON target if required by spec
+    - Do NOT add a SWITCHON/SWITCHOFF action if the desired end state fully captures the goal.
 
-Critical principles (address common errors):
-• Minimality: Include only what is necessary to satisfy the goal. Do not add extra states like character SITTING or chair OCCUPIED, room INSIDE, or FACING unless the description explicitly makes them the objective or they are required by the task semantics.
-• Device power states: When the objective turns a powered device ON (light, computer, television, washing_machine, freezer/microwave), add ON and also PLUGGED_IN if that state exists for the device in `possible states`. Do not invent unrelated states like FULL, DIRTY, or OCCUPIED.
-• Correct object class: Use the exact object class mentioned or implied. If both 'light' and 'floor_lamp' exist and the goal says “turn on the lights,” use the 'light' objects, not 'floor_lamp', unless the description explicitly targets the lamp.
-• Relations vs states: Prefer relations to represent interactions/placements and avoid misusing object states.
-  - Use ON to place items on appliances/surfaces; use INSIDE for containment (e.g., groceries in freezer).
-  - Use HOLDS_LH/HOLDS_RH to represent the character holding tools (e.g., toothbrush, toothpaste, remote_control) rather than making those tools DIRTY/OPEN unless explicitly required.
-  - For TV channel change: include the remote in a HOLDS_* relation and use action TOUCH|PUSH to indicate changing the channel; also ensure the television is ON (and PLUGGED_IN if applicable).
-• Multi-instance scope: If the description clearly refers to plural or “all” (e.g., “turn on the lights”), add goals for each relevant instance of that class present in the scene. If it refers to a specific subset, add only those. When ambiguous, choose the minimal set that satisfies the wording.
-• Containers and insertion: When the goal is “put X in Y,” add INSIDE edges for the explicitly mentioned items only. Keep the set minimal; do not add extra items not named or clearly implied. If Y is a powered container (e.g., freezer/fridge) and OPEN/PLUGGED_IN are in `possible states`, set Y to OPEN and PLUGGED_IN to reflect a valid placement-ready powered container.
-• Washing clothes: Reflect the final operational state and placements, not “amount” states. For a running washer, set washing_machine to ON (and CLOSED, PLUGGED_IN if these states exist) and add ON edges from clothes/soap to the washing_machine when the description implies they are loaded on/into it.
-• Toilet-related goals: Match the description’s intent with the minimal relation:
-  - “Go to the bathroom and look at the toilet” → INSIDE bathroom and FACING toilet.
-  - “Sit on the toilet” → ON relation from character to toilet (do not add OPEN/OCCUPIED unless the text explicitly requires it).
+2) Action minimality (strong filter)
+    - Only include actions when node/edge goals cannot encode the goal's completion.
+    - Navigation/setup actions (WALK, FIND, LOOKAT, TURNTO) are forbidden unless explicitly required by the goal and cannot be represented with states/relations.
+    - Limit actions to fewer than three and prefer canonical actions: TYPE, SLEEP, RINSE, WASH, TOUCH|PUSH (button press), DRINK, READ.
+    - Use the canonical action names exactly as provided; do not paraphrase descriptions.
 
-Validation checklist before output:
-- Use only states listed in each object's `possible states`.
-- Every relation's 'to_name' is allowed by `rel_obj_pairs` for that relation.
-- Prefer node/edge goals to represent switch/door outcomes instead of action goals.
-- Avoid adding extra nodes/edges/actions that are not strictly required by the description.
-- Ensure the JSON is syntactically valid and uses exactly the three required top-level keys.
+3) Relation inference and validation
+    - When text says put/place/load A in/on B, infer an edge:
+        • Washing machine/dishwasher: use relation ON to the appliance (dataset convention).
+        • Freezer/fridge: use INSIDE to the freezer.
+    - Relations must be one of {ON, INSIDE, BETWEEN, CLOSE, FACING, HOLDS_RH, HOLDS_LH} and 'to_name' must be in the allowed set for that relation.
+    - Prefer relations over actions like PUTIN unless relations suffice.
 
-Reference examples (illustrative, adapt to the provided scene):
-1) Turn on lights
-    - node goals: each light {'state': 'ON'} and, if available, {'state': 'PLUGGED_IN'} for those lights.
-    - no action goals for SWITCHON; represent with states only.
-2) Wash clothes
-    - node goals: washing_machine {'state': 'ON'} plus {'state': 'CLOSED'} and {'state': 'PLUGGED_IN'} if available.
-    - edge goals: clothes and soap ON washing_machine if described as loaded.
-3) Brush teeth
-    - edge goals: character HOLDS_* toothbrush and HOLDS_* tooth_paste.
-    - no node goals like toothbrush DIRTY or toothpaste OPEN unless explicitly stated.
-4) Change TV channel
-    - node goals: television {'state': 'ON'} and {'state': 'PLUGGED_IN'} if available.
-    - edge goals: character FACING television and HOLDS_* remote_control (hand choice arbitrary).
-    - action goals: {'action': 'TOUCH|PUSH', 'description': 'change channel using the remote_control'}.
-5) Work
-    - node goals: computer {'state': 'ON'}.
-    - no posture (SITTING), chair OCCUPIED, INSIDE, or FACING unless explicitly required.
+4) State pairing and deduplication
+    - If a device being ON requires PLUGGED_IN in possible states, include both ON and PLUGGED_IN.
+    - Do not repeat identical node goals; remove duplicates.
+    - Do not add states for peripheral objects unless explicitly required.
 
-Relevant objects in the scene are:
-<object_in_scene>
+5) Composite labels handling
+    - If the goal implies alternatives like RINSE|WASH or TOUCH|PUSH, choose the minimal set that matches the described outcome (prefer both only when explicitly required).
 
-All possible relationships are the keys of the following dictionary, and the corresponding values are their descriptions:
-<relation_types>
+6) Output format constraints
+    - 'node goals': list of {'name': OBJECT_NAME, 'state': STATE} using only {CLOSED, OPEN, ON, OFF, SITTING, DIRTY, CLEAN, LYING, PLUGGED_IN, PLUGGED_OUT}.
+    - 'edge goals': list of {'from_name': OBJECT_NAME, 'relation': RELATION, 'to_name': OBJECT_NAME} adhering to the allowed targets per relation:
+        {'ON': {'table', 'character', 'dishwasher', 'toilet', 'oven', 'couch', 'bed', 'washing_machine', 'coffe_maker'},
+        'HOLDS_LH': {'water_glass', 'novel', 'tooth_paste', 'keyboard', 'spectacles', 'toothbrush'},
+        'HOLDS_RH': {'phone', 'mouse', 'water_glass', 'remote_control', 'address_book', 'novel', 'tooth_paste', 'cup', 'drinking_glass', 'toothbrush'},
+        'INSIDE': {'home_office', 'hands_both', 'freezer', 'bathroom', 'dining_room'},
+        'FACING': {'phone', 'toilet', 'television', 'computer', 'laptop', 'remote_control'},
+        'CLOSE': {'shower', 'cat'}}
+    - 'action goals': list of {'action': ACTION, 'description': DICTIONARY_DESCRIPTION} from the allowed dictionary below. Descriptions must match exactly.
 
-Each relation has a fixed set of objects to be its 'to_name' target. Here is a dictionary where keys are 'relation' and corresponding values are its possible set of 'to_name' objects:
-<rel_obj_pairs>
-
-Below is a dictionary of possible actions, whose keys are all possible actions and values are corresponding descriptions.
-<action_space>
+Allowed actions dictionary:
+{'CLOSE': 'as opposed to open sth, CLOSE sth means changing the state from OPEN to CLOSE, not get close to!', 'DRINK': 'drink up sth', 'FIND': 'find and get near to sth', 'WALK': 'walk towards sth, get near to sth', 'GRAB': 'grab sth', 'LOOKAT': 'look at sth, face sth', 'LOOKAT_SHORT': 'shortly look at sth', 'LOOKAT_LONG': 'look at sth for long', 'OPEN': 'open sth, as opposed to close sth', 'POINTAT': 'point at sth', 'PUTBACK': 'put object A back to object B', 'PUTIN': 'put object A into object B', 'PUTOBJBACK': 'put object back to its original place', 'RUN': 'run towards sth, get close to sth', 'SIT': 'sit on sth', 'STANDUP': 'stand up', 'SWITCHOFF': 'switch sth off (normally lamp/light)', 'SWITCHON': 'switch sth on (normally lamp/light)', 'TOUCH': 'touch sth', 'TURNTO': 'turn and face sth', 'WATCH': 'watch sth', 'WIPE': 'wipe sth out', 'PUTON': 'put on clothes, need to hold the clothes first', 'PUTOFF': 'take off clothes', 'GREET': 'greet to somebody', 'DROP': "drop something in robot's current room, need to hold the thing first", 'READ': 'read something, need to hold the thing first', 'LIE': 'lie on something, need to get close the thing first', 'POUR': 'pour object A into object B', 'TYPE': 'type on keyboard', 'PUSH': 'move sth', 'PULL': 'move sth', 'MOVE': 'move sth', 'WASH': 'wash sth', 'RINSE': 'rinse sth', 'SCRUB': 'scrub sth', 'SQUEEZE': 'squeeze the clothes', 'PLUGIN': 'plug in the plug', 'PLUGOUT': 'plug out the plug', 'CUT': 'cut some food', 'EAT': 'eat some food', 'RELEASE': 'drop sth inside the current room', 'SLEEP': 'go to sleep'}
 
 Goal name and goal description:
 <goal_str>
 
-Now output the symbolic version of the goal in the specified JSON format.
+Relevant objects in the scene are:
+<object_in_scene>
+
+TEMPLATES (hints in brackets; adapt as needed; keep minimal and canonical) (ONLY USE OBJECTS THAT ARE IN THE SCENE):
+
+Work
+- node goals: [
+    {'name': 'computer', 'state': 'ON'} (Mandatory)
+]
+- edge goals: [] (No goals)
+- action goals: [] (No goals)
+
+Browse internet
+- node goals: [
+    {'name': 'computer', 'state': 'ON'}
+] OR [
+    {'name': 'laptop', 'state': 'ON'}, {'name': 'laptop', 'state': 'PLUGGED_IN'}
+]
+- edge goals: [
+    {'from_name': 'character', 'relation': 'FACING', 'to_name': 'computer'}
+]
+- action goals: [
+    {'action': 'LOOKAT', 'description': 'look at sth, face sth'} (Mandatory)
+]
+
+Pick up phone
+- node goals: [] (No goals)
+- edge goals: [
+    {'from_name': 'character', 'relation': 'HOLDS_RH', 'to_name': 'phone'} (Mandatory)
+]
+- action goals: [] (No goals)
+
+Wash dishes with dishwasher
+- node goals: [
+    {'name': 'dishwasher', 'state': 'CLOSED'} (Mandatory),
+    {'name': 'dishwasher', 'state': 'ON'} (Mandatory)
+]
+- edge goals: [
+    {'from_name': <CUTLERY>, 'relation': 'ON', 'to_name': 'dishwasher'} (Repeat as needed, duplicate if multiple of same cutlery are present),
+    {'from_name': 'dish_soap', 'relation': 'ON', 'to_name': 'dishwasher'} (Mandatory)
+    ]
+- action goals: [] (No goals)
+
+Watch TV
+- node goals: [
+    {'name': 'television', 'state': 'ON'} (Mandatory),
+    {'name': 'television', 'state': 'PLUGGED_IN'} (Mandatory)
+]
+- edge goals: [
+    {'from_name': 'character', 'relation': 'FACING', 'to_name': 'television'} (Mandatory)
+]
+- action goals: [
+    {'action': 'WATCH', 'description': 'watch sth'} (Mandatory)
+]
+
+Write an email
+- node goals: [{'name': <DEVICE>, 'state': 'ON'}]
+- edge goals: [] (No goals)
+- action goals: [
+    {'action': 'TYPE', 'description': 'type on keyboard'} (Mandatory)
+]
+
+Wash clothes
+- node goals: [
+    {'name': 'washing_machine', 'state': 'CLOSED'} (Mandatory),
+    {'name': 'washing_machine', 'state': 'ON'} (Mandatory),
+    {'name': 'washing_machine', 'state': 'PLUGGED_IN'} (Mandatory)
+]
+- edge goals: [
+    {'from_name': <CLOTHING>, 'relation': 'ON', 'to_name': 'washing_machine'} (Repeat as needed, duplicate if multiple of same clothing are present),
+    {'from_name': <SOAP/DETERGENT>, 'relation': 'ON', 'to_name': 'washing_machine'} (Mandatory)
+]
+- action goals: [] (No goals)
+
+Wash hands
+- node goals: [] (No goals)
+- edge goals: []
+- action goals: [
+    {'action': 'WASH', 'description': 'wash sth'}
+]
+
+Drink
+- node goals: [] (No goals)
+- edge goals: [
+    {'from_name': 'character', 'relation': 'HOLDS_RH', 'to_name': <CONTAINER>} (Mandatory)
+]
+- action goals: [
+    {'action': 'DRINK', 'description': 'drink up sth'} (Mandatory)
+]
+
+Read book
+- node goals: [] (No goals)
+- edge goals: [
+    {'from_name': 'character', 'relation': 'HOLDS_RH', 'to_name': <BOOK>} (Mandatory)
+]
+- action goals: [
+    {'action': 'READ', 'description': 'read something, need to hold the thing first'} (Mandatory)
+]
+
+Change TV channel
+- node goals: [
+    {'name': 'television', 'state': 'ON'} (Mandatory),
+    {'name': 'television', 'state': 'PLUGGED_IN'} (Mandatory)
+]
+- edge goals: [
+    {'from_name': 'character', 'relation': 'HOLDS_RH', 'to_name': 'remote_control'},
+    {'from_name': 'character', 'relation': 'FACING', 'to_name': 'television'}
+]
+- action goals: [
+    {'action': 'TOUCH', 'description': 'touch sth'} (Mandatory)
+]
+
+Make coffee
+- node goals: [
+    {'name': 'coffe_maker', 'state': 'CLOSED'} (Mandatory),
+    {'name': 'coffe_maker', 'state': 'ON'} (Mandatory),
+    {'name': 'coffe_maker', 'state': 'PLUGGED_IN'} (Mandatory)
+]
+- edge goals: [
+    {'from_name': 'coffee_filter', 'relation': 'ON', 'to_name': 'coffe_maker'} (Mandatory),
+    {'from_name': 'ground_coffee', 'relation': 'ON', 'to_name': 'coffe_maker'} (Mandatory)
+]
+- action goals: [
+    {'action': 'POUR', 'description': 'pour object A into object B'} (Mandatory)
+]
+
+Wash dishes by hand
+- node goals: [] (No goals)
+- edge goals: [] (No goals)
+- action goals: [
+    {'action': 'WASH', 'description': 'wash sth'} (Mandatory),
+    {'action': 'GRAB', 'description': 'grab sth'} (Mandatory)
+]
+
+Relax on sofa
+- node goals: [
+    {'name': 'character', 'state': <SITTING/LYING>} (Mandatory)
+]
+- edge goals: [
+    {'from_name': 'character', 'relation': 'ON', 'to_name': 'couch'} (Mandatory)
+]
+- action goals: [] (No goals)
+
+Listen to music
+- node goals: [
+    {'name': <DEVICE>, 'state': 'CLOSED'} (Mandatory),
+    {'name': <DEVICE>, 'state': 'ON'} (Mandatory),
+    {'name': <DEVICE>, 'state': 'PLUGGED_IN'} (Mandatory)
+    ]
+- edge goals: []
+- action goals: [] (No goals)
+
+Turn on light
+- node goals: [
+    {'name': 'light', 'state': 'ON'} (Mandatory),
+    {'name': 'light', 'state': 'PLUGGED_IN'} (Mandatory)
+] (Repeat for multiple lights if needed) OR [
+    {'name': 'floor_lamp', 'state': 'ON'} (Mandatory)
+]
+- edge goals: [] (No goals)
+- action goals: [] (No goals)
+
+Cook some food
+- node goals: [
+    {'name': 'oven', 'state': 'CLOSED'} (Mandatory),
+    {'name': 'oven', 'state': 'ON'} (Mandatory),
+    {'name': 'oven', 'state': 'PLUGGED_IN'} (Mandatory)
+]
+- edge goals: [
+    {'from_name': <COOKWARE>, 'relation': 'ON', 'to_name': 'oven'} (Mandatory)
+]
+- action goals: [] (No goals)
+
+Pet cat
+- node goals: [] (No goals)
+- edge goals: [
+    {'from_name': 'character', 'relation': 'CLOSE', 'to_name': 'cat'} (Mandatory)
+]
+- action goals: [
+    {'action': 'TOUCH', 'description': 'touch sth'} (Mandatory)
+]
+
+Put groceries in Fridge
+- node goals: [
+    {'name': 'freezer', 'state': 'OPEN'} (Mandatory),
+    {'name': 'freezer', 'state': 'PLUGGED_IN'} (Mandatory)
+]
+- edge goals: [
+    {'from_name': <ITEM>, 'relation': 'INSIDE', 'to_name': 'freezer'} (Optional)
+]
+- action goals: [] (No goals)
+
+Set up table
+- node goals: [] (No goals)
+- edge goals: [
+    {'from_name': <ITEM>, 'relation': 'ON', 'to_name': 'table'} (Repeat as needed)
+]
+- action goals: [] (No goals)
+
+Wash teeth
+- node goals: [] (No goals)
+- edge goals: [
+    {'from_name': 'character', 'relation': 'HOLDS_LH', 'to_name': 'toothbrush'} (Mandatory)
+]
+- action goals: [] (No goals)
+
+Go to sleep
+- node goals: [
+    {'name': 'character', 'state': 'LYING'} (Mandatory)
+]
+- edge goals: [
+    {'from_name': 'character', 'relation': 'ON', 'to_name': 'bed'} (Mandatory)
+]
+- action goals: [
+    {'action': 'SLEEP', 'description': 'go to sleep'} (Mandatory)
+]
+
+Brush teeth
+- node goals: [] (No goals)
+- edge goals: [
+    {'from_name': 'character', 'relation': 'HOLDS_RH', 'to_name': 'toothbrush'} (Mandatory),
+    {'from_name': 'character', 'relation': 'HOLDS_RH', 'to_name': 'toothbrush'} (Mandatory)
+]
+- action goals: [] (No goals)
+
+Go to toilet
+- node goals: [] (No goals)
+- edge goals: [
+    {'from_name': 'character', 'relation': 'ON', 'to_name': 'toilet'} (Optional)
+]
+- action goals: [] (No goals)
+
+Take shower
+- node goals: [] (No goals)
+- edge goals: [
+    {'from_name': 'character', 'relation': 'CLOSE', 'to_name': 'shower'} (Mandatory)
+]
+- action goals: [] (No goals)
+
+Get some water
+- node goals: [] (No goals)
+- edge goals: [
+    {'from_name': 'character', 'relation': 'INSIDE', 'to_name': 'dining_room'}
+]
+- action goals: [] (No goals)
+
+Now output only the JSON object: {'node goals': ..., 'edge goals': ..., 'action goals': ...} with no extra text.
 """
 
 if __name__ == "__main__":

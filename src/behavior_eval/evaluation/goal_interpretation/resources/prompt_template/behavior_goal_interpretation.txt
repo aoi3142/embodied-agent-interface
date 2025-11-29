@@ -1,7 +1,12 @@
 You are a helpful assistant for goal interpretation in an embodied environment. You should only output in json format. Your task is to understand natural language goals for a household robot, reason about the object states and relationships, and turn natural language goals into symbolic goal states in the designated format. The goals include: unary goals describing one object's own unary states, and binary goals describing object-object binary relationships. The input will be the goal's name, the goal's description, relevant objects as well as their possible unary states, and all initial unary and binary states. The output should be the symbolic version of the goal states.
 
+CRITICAL conventions (must follow exactly):
+- Use lower-case tokens for all state and relation names.
+- Only use the allowed sets below. Do not invent new states/relations.
+- Only include final goal states strictly required by the instructions. Do not add extra, speculative, or intermediate steps.
 
-Relevant objects in the scene indicates those objects involved in the action execution initially. It will include the object name, and the object's all possible unary states (In goal conditions, each state can be set to true: ["Stained", "cup.n.01_1"] or not true: ["not", ["Stained", "cup.n.01_1"]]). It follows the format: object name including object id, possible unary states: ...(all possible unary states). Your proposed unary object states should be within the following set: {"Cooked", "Open", "Frozen", "Dusty", "Stained", "Sliced", "Soaked", "ToggledOn"}
+
+Relevant objects in the scene indicates those objects involved in the action execution initially. It will include the object name, and the object's all possible unary states (In goal conditions, each state can be set to true: ["stained", "cup.n.01_1"] or not true: ["not", ["stained", "cup.n.01_1"]]). It follows the format: object name including object id, possible unary states: ...(all possible unary states). Your proposed unary object states must be within the following set (lower-case): {"cooked", "open", "frozen", "dusty", "stained", "sliced", "soaked", "toggled_on"}.
 
 
 Relevant objects in the scene are:
@@ -12,29 +17,44 @@ All initial states in the scene are:
 
 Symbolic goals format:
 
-Node goal states should be a set indicating the desired final goal states of single objects. Each goal in the list should be a list with two elements: the first element is the state name, which comes from the set {"Cooked", "Open", "Frozen", "Dusty", "Stained", "Sliced", "Soaked", "ToggledOn"}; the second element is the object name, which comes from the list of relevant objects in the scene provided above. An example being ["Frozen", "chicken.n.01_1"]. To indicate the negation of a state such as the above example, simply use the format ["not", ["Frozen", "chicken.n.01_1"]]. Use the exact token casing shown here (e.g., "Open", "Dusty", "Stained", "ToggledOn").
+Node goal states should be a list indicating the desired final unary goal states of single objects. Each goal in the list is a list with two elements: the first element is the state name, which must come from {"cooked", "open", "frozen", "dusty", "stained", "sliced", "soaked", "toggled_on"}; the second element is the object name, which must come from the list of relevant objects in the scene provided above. Example: ["frozen", "chicken.n.01_1"]. To indicate negation, use ["not", [STATE, OBJECT]], e.g., ["not", ["open", "jar.n.01_1"]].
 
 
-Edge goal states should be a set indicating the desired binary relationships between two objects. Each goal state in the set is a list of three elements: the first element is the state name, which comes from the set {"nextto", "inside", "onfloor", "ontop", "touching", "under"}, the second and third elements are the object names, with relationship as indicated by the first element. For example, the edge goal condition ["inside", "tomato.n.01_2", "electric_refrigerator.n.01_1"] indicates that the object "tomato.n.01_2" is inside "electric_refrigerator.n.01_1", and the edge goal condition ["ontop", "plate.n.04_1", "countertop.n.01_1"] indicates that the object "plate.n.04_1" is ontop of the object "countertop.n.01_1". Similar to node goal states, edge goal states and also be negated by simply nesting inside a "not", for example ["not", ["inside", "peach.n.03_1", "jar.n.01_2"]] means that the object "peach.n.03_1" is not inside the object "jar.n.01_2".
+Edge goal states should be a list indicating the desired final binary relationships between two objects. Each edge goal is a list of three elements: the first element is the relation name, which must come from {"nextto", "inside", "onfloor", "ontop", "touching", "under"}; the second and third elements are the object names, with direction as indicated by the relation. Examples: ["inside", "tomato.n.01_2", "electric_refrigerator.n.01_1"] and ["ontop", "plate.n.04_1", "countertop.n.01_1"]. To indicate negation, use ["not", [REL, OBJ1, OBJ2]], e.g., ["not", ["inside", "peach.n.03_1", "jar.n.01_2"]].
+
+Constraints and validation checklist (apply strictly):
+- Use only relevant objects listed in <object_in_scene>. Do not invent new objects or IDs.
+- Represent only final desired goal states, not intermediate steps or processes.
+- Do not contradict immutable physical semantics:
+	- "inside": only with containers (e.g., cabinet, bucket, jar, dishwasher, backpack, car, electric_refrigerator, carton, basket, stocking). Do not put things "inside" surfaces like tables, sofas, or beds.
+	- "ontop": use for stable support surfaces (e.g., table, shelf, countertop, bed). Do not use for random non-support objects unless explicitly instructed.
+	- "onfloor": the second argument must be a floor object (e.g., "floor.n.01_*"), not a table or person.
+	- "under": ["under", X, Y] means X is physically below Y (Y can support or cover X). Do not invert roles.
+	- "nextto"/"touching": symmetric proximity/contact; avoid improbable long chains unless the goal explicitly requires them.
+- Be minimal and task-aligned:
+	- Only include cleanliness/open/close states (e.g., "dusty", "stained", "open") if the goal explicitly requires them.
+	- Avoid blanket assertions over many similar objects unless the task specifies counts or sets.
+	- Do not add extra items or destinations beyond the goal (no speculative contents for boxes, fridges, baskets, etc.).
+- Respect quantities and directions: match the number of items and place them in plausible, goal-relevant locations; ensure subject/object order is correct for directional relations (e.g., item inside container, device under table, not vice versa).
+- Do not negate edges or states unless the goal explicitly requires a negation.
+- Deduplicate identical goals and remove impossible/contradictory relations.
+
+Formatting requirements (must match exactly):
+- Output a single JSON object with exactly two keys: "node goals" and "edge goals".
+- Values must be JSON arrays (lists), not sets.
+- All state/relation tokens must be lower-case and from the allowed sets.
+- Wrap negations strictly as ["not", [...]].
+
+Tiny examples (illustrative only):
+- Close jars after bottling only if asked:
+	{"node goals": [], "edge goals": [["inside", "strawberry.n.01_1", "jar.n.01_1"]]}
+- Place printer under the table (not the reverse):
+	{"node goals": [], "edge goals": [["under", "printer.n.03_1", "table.n.02_1"]]}
+- Serve food on dishes, not directly on table:
+	{"node goals": [], "edge goals": [["ontop", "bread.n.01_1", "plate.n.04_1"]]}
 
 
 Task Name and Goal Instructions:
 <instructions_str>
 
-Additional instructions:
-- When item A is placed nextto another item B, if B is ontop of item C, A should also be ontop of item C.
-- When multiple items are stacked, e.g., A ontop of B and B ontop of C, do not include A ontop of C as a goal.
-
-- Separation and exclusivity: If the instructions imply separating categories into distinct containers or locations (e.g., bowls in one cabinet and cups in another; items in separate jars), include the corresponding negative edge goals to enforce exclusivity. For example, if ["inside", A, X] and ["inside", B, Y] are required and X≠Y with separation implied, also include ["not", ["inside", A, Y]] and ["not", ["inside", B, X]]. Do not add such negatives unless separation is stated or clearly implied by the instructions.
-
-- Tool preparation states: When the instructions mention using a cleaning tool/liquid or container (e.g., rag, scrub brush, soap, bucket), include required preparation node/edge goals explicitly if they are necessary to satisfy the instruction (e.g., ["Soaked", rag], ["inside", rag, bucket]). Similarly, if the instruction requires closing jars/containers, include ["not", ["Open", container]].
-
-- Minimality and relevance: Only include node and edge goals that are necessary to satisfy the instructions. Do not add broad negative goals for unrelated objects or surfaces (e.g., avoid generic ["not", ["ontop", X, table]] unless explicitly required). Avoid adding extra rooms/floors not mentioned in the instructions.
-
-- Multi-entity coverage: If the instruction applies to a set of similar objects (e.g., all vegetables, all sneakers, each basket), ensure the goals cover every required instance and both their state goals (e.g., ["Sliced", …], ["not", ["Dusty", …]]) and relation goals (e.g., ["inside", …], ["nextto", …]) as required.
-
-- Explicit positional facts: If the instruction specifies that an object should be on the floor or on a specific floor, include the explicit ["onfloor", obj, floor] edge goal, even if other relations (e.g., under/nextto) might imply this.
-
-- ID specificity and deduplication: Use the exact object IDs as provided in "Relevant objects in the scene" and "All initial states in the scene". Do not invent new objects or IDs. Do not duplicate logically identical goals; include each required goal once.
-
-Now using json format, output just the symbolic version of the goal states without any explanation. Output a single json object string, whose keys are 'node goals' and 'edge goals', and values are your output of symbolic node goals and symbolic edge goals, respectively. That is, your output should be of the format: {"node goals": SYMBOLIC_NODE_GOALS, "edge goals": SYMBOLIC_EDGE_GOALS}. Also, please strictly follow the aforementioned symbolic goal format.
+Now using json format, output just the symbolic version of the goal states without any explanation. Output a single json object string, whose keys are "node goals" and "edge goals", and values are your output of symbolic node goals and symbolic edge goals, respectively. That is, your output must be of the format: {"node goals": SYMBOLIC_NODE_GOALS, "edge goals": SYMBOLIC_EDGE_GOALS}. Strictly follow the allowed sets, lower-case casing, directional semantics, and formatting rules above.
