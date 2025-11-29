@@ -20,7 +20,7 @@ import argparse
 schemas = repeat(None)  # No schema
 
 # Directory containing the prompt files
-prompts_file = "submission_v2/llm_prompts/v2_{env}_{task}_prompts.json"
+prompts_file = "submission_v4/llm_prompts/v2_{env}_{task}_prompts.json"
 end = None  # Set to None to process all prompts, or set to a positive integer to test with a subset
 
 # output_dir = f"submission_v2/sample_submission"
@@ -28,16 +28,30 @@ output_dir = f"testing/sample_submission"
 os.makedirs(output_dir, exist_ok=True)
 output_json = "{output_dir}/{env}_{task}_outputs.json"
 
-# Specify OpenRouter Model
-# model = "Qwen/Qwen3-235B-A22B-Thinking-2507"
-model = "qwen-3-235b-a22b-thinking-2507"
+envs = [
+    # "behavior", 
+    "virtualhome"
+    ]
+tasks = [
+    "goal_interpretation", 
+    # "subgoal_decomposition", 
+    # "action_sequencing", 
+    # "transition_modeling"
+    ]
 
-# url = "https://openrouter.ai/api/v1/chat/completions"
-url = "https://api.cerebras.ai/v1/chat/completions"
+# Specify OpenRouter Model
+# model = "qwen-3-235b-a22b-thinking-2507"
+model = "qwen/qwen3-235b-a22b-thinking-2507"
+
+url = "https://openrouter.ai/api/v1/chat/completions"
+# url = "https://api.cerebras.ai/v1/chat/completions"
 
 # Rate limiting parameters
-max_rate = 1        # max requests
-time_period = 3.1   # per time period in seconds
+max_rate = 10     # max requests within time_period (rate limiter throttle)
+time_period = 10  # window size in seconds for rate limiter
+
+# aiohttp default simultaneous connection limit is ~100; raise if you want more in-flight requests
+CONCURRENCY_LIMIT = 250  # Increase this (e.g. 500 or 1000) to allow more simultaneous connections
 
 MAX_WORKERS = 1  # Number of concurrent threads for different env-task combinations
 
@@ -45,10 +59,10 @@ seed = 0
 top_k = 20
 
 # Outer loop retry limit for no output / incomplete outputs (when server returns incomplete reasoning or completion)
-MAX_NO_OUTPUT_RETRIES = 0
+MAX_NO_OUTPUT_RETRIES = 10
 
 # Inner loop retry limit for no response / rate limiting from server (set to a higher value to retry when rate limited or server error)
-MAX_NO_RESPONSE_RETRIES = 0
+MAX_NO_RESPONSE_RETRIES = 3
 
 # Number of copies to generate per prompt, should be 1 for most cases
 COPIES_PER_PROMPT = 1
@@ -143,6 +157,9 @@ async def rate_limited_post(min_limiter, session, url, headers, payload, identif
             async with session.post(url, headers=headers, json=payload) as response:
 
                 completion = await response.json()
+                if response.status == 403:  # Key limit
+                    tqdm.write(f"Key limited for prompt {identifier}")
+                    return {}
                 if response.status == 429:  # Rate limit
                     raise ValueError(f"Rate limited")
                 if response.status == 503:  # Provider not available
@@ -159,9 +176,9 @@ async def rate_limited_post(min_limiter, session, url, headers, payload, identif
 
                 return completion
 
-        except KeyboardInterrupt:
-            return {}
-
+        except asyncio.CancelledError:
+            # Re-raise cancellation to properly terminate the task
+            raise
         except Exception as e:
             tqdm.write(f"Error for prompt {identifier}: {type(e).__name__}: {e}, ", end='')
             delay *= 2  # Exponential backoff
@@ -213,6 +230,7 @@ async def ask(session, min_limiter, identifier, env, task, messages, schema, pos
     try:
         print_content = json.loads(content)
     except Exception:
+        tqdm.write(f"Failed to parse content for prompt {identifier} as JSON.")
         content = ""
         reasoning_trace = ""
         print_content = {}
@@ -233,7 +251,7 @@ async def ask(session, min_limiter, identifier, env, task, messages, schema, pos
             await asyncio.sleep(2 * (MAX_NO_OUTPUT_RETRIES - no_output_retries))  # Async sleep
             return await ask(session, min_limiter, identifier, env, task, messages, schema, post_processing, no_output_retries, reflexion_round)
         else:
-            return {"identifier": identifier, "llm_output": content.strip(), "reasoning": ""}, completion
+            return {"identifier": identifier, "llm_output": content.strip(), "reasoning": "", "prompt_tokens": 0, "completion_tokens": 0}, completion
 
     if reflexion_round < MAX_REFLEXION_ROUNDS:
         reflexion_round += 1
@@ -264,7 +282,7 @@ async def ask(session, min_limiter, identifier, env, task, messages, schema, pos
     except KeyError:
         provider = ""
     tqdm.write("_" * 20 + "\n" + f"{env} {task} {identifier} (tokens: {tokens_input}|{tokens_generated}){provider}" + "\n\n" + print_content + "\n")
-    return {"identifier": identifier, "llm_output": content, "reasoning": reasoning_trace}, completion
+    return {"identifier": identifier, "llm_output": content, "reasoning": reasoning_trace, "prompt_tokens": tokens_input, "completion_tokens": tokens_generated}, completion
 
 async def process_env_task(session, min_limiter, env, task, schema, postprocessing):
     """Process a single environment-task combination"""
@@ -341,8 +359,36 @@ async def process_env_task(session, min_limiter, env, task, schema, postprocessi
     if added_count > 0:
         tqdm.write(f"Added {added_count} existing outputs to chat histories for {env} - {task}")
 
-    _tasks = [ask(session, min_limiter, identifier, env, task, chat, schema, postprocessing, reflexion_round=(len(chat)//2)) for _, (identifier, chat) in zip(range(end if end is not None else len(chats)), chats.items()) for _ in range(COPIES_PER_PROMPT)]
-    gathered_results = await tqdm_asyncio.gather(*_tasks, desc=f"{env} - {task}", total=len(_tasks))
+    # Create tasks as Task objects so we can cancel them on interrupt
+    _tasks = [asyncio.create_task(ask(session, min_limiter, identifier, env, task, chat, schema, postprocessing, reflexion_round=(len(chat)//2))) for _, (identifier, chat) in zip(range(end if end is not None else len(chats)), chats.items()) for _ in range(COPIES_PER_PROMPT)]
+    
+    try:
+        gathered_results = await tqdm_asyncio.gather(*_tasks, desc=f"{env} - {task}", total=len(_tasks))
+    except KeyboardInterrupt:
+        tqdm.write(f"\nKeyboard interrupt detected for {env} - {task}. Cancelling pending requests and saving completed results...")
+        
+        # Cancel all pending tasks
+        for task_obj in _tasks:
+            if not task_obj.done():
+                task_obj.cancel()
+        
+        # Wait for all cancellations to complete
+        await asyncio.gather(*_tasks, return_exceptions=True)
+        
+        # Gather only completed results (ignore cancelled ones)
+        gathered_results = []
+        for task_obj in _tasks:
+            if task_obj.done() and not task_obj.cancelled():
+                try:
+                    gathered_results.append(task_obj.result())
+                except Exception:
+                    pass  # Skip failed tasks
+        
+        tqdm.write(f"Collected {len(gathered_results)} completed results out of {len(_tasks)} total tasks.")
+        
+        if not gathered_results:
+            tqdm.write(f"No completed results to save for {env} - {task}.")
+            return  # Exit gracefully without saving
 
     results = []
     # completions = []
@@ -353,6 +399,7 @@ async def process_env_task(session, min_limiter, env, task, schema, postprocessi
         if not (c and r["llm_output"] and r["reasoning"]):
             r["llm_output"] = ""
             r["reasoning"] = ""
+            r["completion_tokens"] = 0
             failures += 1
         completed_ids.add(r["identifier"])
         results.append(r)
@@ -365,7 +412,11 @@ async def process_env_task(session, min_limiter, env, task, schema, postprocessi
         results = prev_out_ + results
 
     # Save results for eai-eval
+    tqdm.write(f"Saving {len(results)} results to {out_json} for {env} - {task}, {failures} failures.")
     with open(out_json, "w") as f:
+        json.dump(results, f, indent=2)
+    os.makedirs(out_json.rsplit("/", 1)[0] + f"/{env}/{task}/", exist_ok=True)
+    with open(f"/{env}/{task}/".join(out_json.rsplit("/", 1)), "w") as f:
         json.dump(results, f, indent=2)
 
 async def run_env_task_worker(env, task, schema, postprocessing):
@@ -374,8 +425,10 @@ async def run_env_task_worker(env, task, schema, postprocessing):
     min_limiter = AsyncLimiter(max_rate=max_rate, time_period=time_period)
 
     # Create session with timeout
-    timeout = aiohttp.ClientTimeout(total=30 * 60)  # 30 minutes timeout
-    async with aiohttp.ClientSession(timeout=timeout) as session:
+    timeout = aiohttp.ClientTimeout(total=60 * 60)  # 60 minutes timeout
+    # Increase connector limit to allow >100 simultaneous connections if desired
+    connector = aiohttp.TCPConnector(limit=CONCURRENCY_LIMIT)
+    async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:
         try:
             await process_env_task(session, min_limiter, env, task, schema, postprocessing)
         finally:
@@ -383,16 +436,6 @@ async def run_env_task_worker(env, task, schema, postprocessing):
             await asyncio.sleep(0.1)  # Give time for callbacks to complete
 
 def main():
-    envs = [
-        "behavior", 
-        "virtualhome"
-        ]
-    tasks = [
-        "goal_interpretation", 
-        "subgoal_decomposition", 
-        "action_sequencing", 
-        "transition_modeling"
-        ]
 
     # Create all env-task combinations
     work_items = []
@@ -439,19 +482,33 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, default=model, help="OpenRouter model to use")
     parser.add_argument("--url", type=str, default=url, help="URL for OpenRouter API")
     parser.add_argument("--port", type=int, default=None, help="Port for vLLM server for local testing, overrides URL to localhost")
-    parser.add_argument("--max_tokens", type=int, default=payload["max_tokens"] if "max_tokens" in payload else None, help="Max tokens for generation")
+    parser.add_argument("--max_tokens", type=int, default=payload.get("max_tokens"), help="Max tokens for generation")
+    parser.add_argument("--max_rate", type=int, default=max_rate, help="Rate limiter: max requests per window")
+    parser.add_argument("--time_period", type=int, default=time_period, help="Rate limiter window in seconds")
+    parser.add_argument("--concurrency_limit", type=int, default=CONCURRENCY_LIMIT, help="aiohttp TCPConnector simultaneous connection limit")
+    parser.add_argument("--workers", type=int, default=MAX_WORKERS, help="Thread workers for env-task combos")
     args = parser.parse_args()
+
+    # Apply CLI overrides
     model = args.model
     if args.port is not None:
         url = f"http://localhost:{args.port}/v1/chat/completions"
+        model = "Qwen/Qwen3-235B-A22B-Thinking-2507"
         payload.pop("provider", None)  # Remove provider for local vLLM
     if args.max_tokens is not None:
         payload["max_tokens"] = args.max_tokens
+    if args.max_rate is not None:
+        max_rate = args.max_rate
+    if args.time_period is not None:
+        time_period = args.time_period
+    if args.concurrency_limit is not None:
+        CONCURRENCY_LIMIT = args.concurrency_limit
+    if args.workers is not None:
+        MAX_WORKERS = args.workers
+
     payload["model"] = model
-    tqdm.write(f"Using model: {model} on URL: {url}")
-    # Run the main function directly (no longer async)
+    tqdm.write(f"Using model: {model} on URL: {url}\nRate limit: {max_rate}/{time_period}s, aiohttp concurrency: {CONCURRENCY_LIMIT}, workers: {MAX_WORKERS}")
     try:
         main()
     finally:
-        # Shutdown the IO executor without waiting for background tasks
         _io_executor.shutdown(wait=False)
