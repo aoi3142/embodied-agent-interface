@@ -17,9 +17,9 @@ def simulate_llm_response(
     with lock:
         eval_statistics = EvalStatistics(task_names, eval_stat_path)
         if report[0] != 'Correct':
-            eval_statistics.update_eval_rst_dict(task_name, False, str(report))
+            eval_statistics.update_eval_rst_dict(task_name, False, report)
         else:
-            eval_statistics.update_eval_rst_dict(task_name, True, str(report))
+            eval_statistics.update_eval_rst_dict(task_name, True, report)
         eval_statistics.save_eval_rst_dict()
 
 def worker_task(queue, lock, eval_stat_path, task_names, passing_args):

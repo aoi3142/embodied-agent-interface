@@ -107,6 +107,8 @@
         "SQUEEZE": 1,
         "SLEEP": 0,
         "WAKEUP": 0,
+        "STANDUP": 0,
+        "POUR": 2,
         "RINSE": 1,
         "SCRUB": 1,
         "WASH": 1,

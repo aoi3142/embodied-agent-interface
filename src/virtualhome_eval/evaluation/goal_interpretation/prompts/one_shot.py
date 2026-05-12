@@ -62,10 +62,12 @@ TEMPLATES (hints in brackets; adapt as needed; keep minimal and canonical) (ONLY
 
 Work
 - node goals: [
-    {'name': 'computer', 'state': 'ON'} (Mandatory)
-]
-- edge goals: [] (No goals)
-- action goals: [] (No goals)
+    {'name': 'computer', 'state': 'ON'}
+] OR [
+    {'name': 'laptop', 'state': 'ON'}, {'name': 'laptop', 'state': 'PLUGGED_IN'}
+] (Do not include character state, e.g., SITTING)
+- edge goals: [] (No goals, do not include character relations, e.g., FACING computer)
+- action goals: [] (No goals, do not include interaction with computer, e.g., TYPE, LOOKAT)
 
 Browse internet
 - node goals: [
@@ -102,17 +104,21 @@ Watch TV
 - node goals: [
     {'name': 'television', 'state': 'ON'} (Mandatory),
     {'name': 'television', 'state': 'PLUGGED_IN'} (Mandatory)
-]
+] (Do not include character state, e.g., SITTING/LYING)
 - edge goals: [
     {'from_name': 'character', 'relation': 'FACING', 'to_name': 'television'} (Mandatory)
-]
+] (Do not include character relation ON couch or HOLDS_RH remote_control)
 - action goals: [
     {'action': 'WATCH', 'description': 'watch sth'} (Mandatory)
 ]
 
 Write an email
-- node goals: [{'name': <DEVICE>, 'state': 'ON'}]
-- edge goals: [] (No goals)
+- node goals: [
+    {'name': 'computer', 'state': 'ON'}
+] OR [
+    {'name': 'laptop', 'state': 'ON'}, {'name': 'laptop', 'state': 'PLUGGED_IN'}
+] (Do not include character state, e.g., SITTING/LYING)
+- edge goals: [] (No goals, do not include character relations, e.g., FACING computer, INSIDE home_office)
 - action goals: [
     {'action': 'TYPE', 'description': 'type on keyboard'} (Mandatory)
 ]
@@ -130,23 +136,23 @@ Wash clothes
 - action goals: [] (No goals)
 
 Wash hands
-- node goals: [] (No goals)
+- node goals: [] (No goals, do not include OFF faucet or hands CLEAN)
 - edge goals: []
 - action goals: [
     {'action': 'WASH', 'description': 'wash sth'}
 ]
 
 Drink
-- node goals: [] (No goals)
+- node goals: [] (No goals, do not include container state OPEN/CLOSED or OFF faucet)
 - edge goals: [
     {'from_name': 'character', 'relation': 'HOLDS_RH', 'to_name': <CONTAINER>} (Mandatory)
 ]
 - action goals: [
     {'action': 'DRINK', 'description': 'drink up sth'} (Mandatory)
-]
+] (Do not include action POUR)
 
 Read book
-- node goals: [] (No goals)
+- node goals: [] (No goals, do not include character state, e.g., SITTING/LYING, light state ON/PLUGGED_IN, or book state OPEN)
 - edge goals: [
     {'from_name': 'character', 'relation': 'HOLDS_RH', 'to_name': <BOOK>} (Mandatory)
 ]
@@ -158,7 +164,7 @@ Change TV channel
 - node goals: [
     {'name': 'television', 'state': 'ON'} (Mandatory),
     {'name': 'television', 'state': 'PLUGGED_IN'} (Mandatory)
-]
+] (Do not include character state, e.g., SITTING/LYING)
 - edge goals: [
     {'from_name': 'character', 'relation': 'HOLDS_RH', 'to_name': 'remote_control'},
     {'from_name': 'character', 'relation': 'FACING', 'to_name': 'television'}
@@ -172,17 +178,17 @@ Make coffee
     {'name': 'coffe_maker', 'state': 'CLOSED'} (Mandatory),
     {'name': 'coffe_maker', 'state': 'ON'} (Mandatory),
     {'name': 'coffe_maker', 'state': 'PLUGGED_IN'} (Mandatory)
-]
+] (Do not include cup state FULL)
 - edge goals: [
     {'from_name': 'coffee_filter', 'relation': 'ON', 'to_name': 'coffe_maker'} (Mandatory),
     {'from_name': 'ground_coffee', 'relation': 'ON', 'to_name': 'coffe_maker'} (Mandatory)
-]
+] (Do not include water to be ON coffe_maker)
 - action goals: [
     {'action': 'POUR', 'description': 'pour object A into object B'} (Mandatory)
 ]
 
 Wash dishes by hand
-- node goals: [] (No goals)
+- node goals: [] (No goals, do not include dishes CLEAN or faucet OFF)
 - edge goals: [] (No goals)
 - action goals: [
     {'action': 'WASH', 'description': 'wash sth'} (Mandatory),
@@ -222,17 +228,17 @@ Cook some food
     {'name': 'oven', 'state': 'CLOSED'} (Mandatory),
     {'name': 'oven', 'state': 'ON'} (Mandatory),
     {'name': 'oven', 'state': 'PLUGGED_IN'} (Mandatory)
-]
+] (Do not include food state COOKED or freezer state CLOSED)
 - edge goals: [
     {'from_name': <COOKWARE>, 'relation': 'ON', 'to_name': 'oven'} (Mandatory)
 ]
 - action goals: [] (No goals)
 
 Pet cat
-- node goals: [] (No goals)
+- node goals: [] (No goals, do not include character state, e.g., SITTING/LYING)
 - edge goals: [
     {'from_name': 'character', 'relation': 'CLOSE', 'to_name': 'cat'} (Mandatory)
-]
+] (Do not include character/cat relation ON couch etc.)
 - action goals: [
     {'action': 'TOUCH', 'description': 'touch sth'} (Mandatory)
 ]
@@ -241,7 +247,7 @@ Put groceries in Fridge
 - node goals: [
     {'name': 'freezer', 'state': 'OPEN'} (Mandatory),
     {'name': 'freezer', 'state': 'PLUGGED_IN'} (Mandatory)
-]
+] (Do not include freezer state CLOSED)
 - edge goals: [
     {'from_name': <ITEM>, 'relation': 'INSIDE', 'to_name': 'freezer'} (Optional)
 ]
@@ -255,11 +261,12 @@ Set up table
 - action goals: [] (No goals)
 
 Wash teeth
-- node goals: [] (No goals)
+- node goals: [] (No goals, do not include toothbrush/teeth state CLEAN/DIRTY or faucet ON/OFF, character INSIDE bathroom)
 - edge goals: [
-    {'from_name': 'character', 'relation': 'HOLDS_LH', 'to_name': 'toothbrush'} (Mandatory)
+    {'from_name': 'character', 'relation': 'HOLDS_LH', 'to_name': 'toothbrush'} (Mandatory),
+    {'from_name': 'character', 'relation': 'HOLDS_RH', 'to_name': 'tooth_paste'} (Mandatory)
 ]
-- action goals: [] (No goals)
+- action goals: [] (No goals, do not include action RINSE/WASH)
 
 Go to sleep
 - node goals: [
@@ -273,26 +280,26 @@ Go to sleep
 ]
 
 Brush teeth
-- node goals: [] (No goals)
+- node goals: [] (No goals, do not include toothbrush state CLEAN/DIRTY or faucet ON/OFF)
 - edge goals: [
     {'from_name': 'character', 'relation': 'HOLDS_RH', 'to_name': 'toothbrush'} (Mandatory),
-    {'from_name': 'character', 'relation': 'HOLDS_RH', 'to_name': 'toothbrush'} (Mandatory)
-]
+    {'from_name': 'character', 'relation': 'HOLDS_LH', 'to_name': 'tooth_paste'} (Mandatory)
+] (Do not include character to be INSIDE bathroom)
 - action goals: [] (No goals)
 
 Go to toilet
-- node goals: [] (No goals)
+- node goals: [] (No goals, do not include character state SITTING or object states, e.g., DIRTY/FLUSHED)
 - edge goals: [
     {'from_name': 'character', 'relation': 'ON', 'to_name': 'toilet'} (Optional)
 ]
-- action goals: [] (No goals)
+- action goals: [] (No goals, do not include WASH/TOUCH/WIPE)
 
 Take shower
-- node goals: [] (No goals)
+- node goals: [] (No goals, do not include shower state ON/OFF or character state CLEAN)
 - edge goals: [
     {'from_name': 'character', 'relation': 'CLOSE', 'to_name': 'shower'} (Mandatory)
 ]
-- action goals: [] (No goals)
+- action goals: [] (No goals, do not include action WASH)
 
 Get some water
 - node goals: [] (No goals)
@@ -300,6 +307,10 @@ Get some water
     {'from_name': 'character', 'relation': 'INSIDE', 'to_name': 'dining_room'}
 ]
 - action goals: [] (No goals)
+
+Hint:
+1. When required, "computer" needs only be "ON" but does not need to be "PLUGGED_IN", while "laptop" needs both "ON" and "PLUGGED_IN"
+2. When required, "floor_lamp" needs only be "ON" but does not need to be "PLUGGED_IN", while "light" needs both "ON" and "PLUGGED_IN"
 
 Now output only the JSON object: {'node goals': ..., 'edge goals': ..., 'action goals': ...} with no extra text.
 """

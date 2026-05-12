@@ -94,6 +94,7 @@ class EvalSubgoalPlan:
         full_tot_num = runtime_checker.goal_info[6]
         full_success_num = runtime_checker.goal_info[7]
         tmp = {
+            "goal": str(runtime_checker.goal_tl_expression),
             'node_tot_num': node_tot_num,
             'node_success_num': node_success_num,
             'edge_tot_num': edge_tot_num,
@@ -101,7 +102,7 @@ class EvalSubgoalPlan:
             'action_tot_num': action_tot_num,
             'action_success_num': action_success_num,
             'full_tot_num': full_tot_num,
-            'full_success_num': full_success_num
+            'full_success_num': full_success_num,
         }
         if not runtime_rst:
             error_category = 'Runtime' if not runtime_checker.executable else 'GoalUnreachable'

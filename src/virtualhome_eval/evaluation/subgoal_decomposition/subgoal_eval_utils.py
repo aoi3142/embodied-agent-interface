@@ -230,7 +230,7 @@ def traj_eval_stats(eval_stat_path):
             tmp_list.append(task.replace('scene_1_',''))
         info = task_info['info']
         assert info is not None, f'info is None for task {task}'
-        info = ast.literal_eval(info)
+        # info = ast.literal_eval(info)
         error_type = info[0]
         if error_type == 'NotParseable' or error_type == 'Hallucination':
             if error_type == 'NotParseable':
@@ -343,7 +343,8 @@ def goal_eval_stats(eval_stat_path, args):
         success = info['success']
         if success:
             num_success += 1
-        info = ast.literal_eval(info['info'])
+        # info = ast.literal_eval(info['info'])
+        info = info['info']
         stat_dict = info[-1]
         if isinstance(stat_dict, dict):
             node_tot_num += stat_dict['node_tot_num']

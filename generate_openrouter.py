@@ -100,12 +100,12 @@ payload = {
     "model": model,
     # "top_k": top_k,
     # "top_p": 0.95,
-    "seed": seed,
+    # "seed": seed,
     "temperature": 0.0,
     # "logprobs": True,
     # "top_logprobs": 20,
-    # "max_tokens": int(16384),
-    # "stop_token_ids": [0],  # Deal with NaN
+    "max_tokens": int(16384*1.5),
+    # "stop_token_ids": [3],  # Deal with NaN
     "provider": {   # For OpenRouter, force provider to support all provided parameters
         "require_parameters": True,
         "quantizations": ["bf16"],
@@ -425,7 +425,7 @@ async def run_env_task_worker(env, task, schema, postprocessing):
     min_limiter = AsyncLimiter(max_rate=max_rate, time_period=time_period)
 
     # Create session with timeout
-    timeout = aiohttp.ClientTimeout(total=60 * 60)  # 60 minutes timeout
+    timeout = aiohttp.ClientTimeout(total=10 * 60)  # 10 minutes timeout
     # Increase connector limit to allow >100 simultaneous connections if desired
     connector = aiohttp.TCPConnector(limit=CONCURRENCY_LIMIT)
     async with aiohttp.ClientSession(timeout=timeout, connector=connector) as session:

@@ -48,7 +48,7 @@ Action primitive is similar to state primitive. Its formal definition looks like
 | WASH | (obj1.id) | none | washes obj1, use only for appliances |
 | GRAB | (obj1.id) | obj1 is ['GRABBABLE'] | grabs obj1 |
 | SWITCHOFF | (obj1.id) | obj1 is ['HAS_SWITCH'] | switches off obj1 |
-| POUR | (obj1.id, obj2.id) | pours obj1 into obj2 |
+| POUR | (obj1.id, obj2.id) | pours obj1 into obj2, after POURing, obj1 will be INSIDE obj2 and does not require another INSIDE action |
 
 # Rules You Must Follow
 - Temporal logic formula refers to a Boolean expression that describes a subgoals plan with temporal and logical order.
@@ -61,11 +61,16 @@ Action primitive is similar to state primitive. Its formal definition looks like
 - When there is temporal order requirement, output the Boolean expressions in different lines.
 - Add intermediate states if necessary to improve logical consistency.
 - If you want to change state of A, while A is in B and B is closed, you should make sure B is open first.
-- Posture and navigation: If initial states include SITTING or LYING and you need to MOVE/FIND/NEXT_TO/FACING, first stand up. In such cases, set "necessity_to_use_action" to "yes" and include STANDUP as the first line. Avoid SITTING/LYING or ONTOP of chair/bed before completing FIND/NEXT_TO/FACING steps unless the final goal requires it.
+- Posture and navigation: If initial states include SITTING or LYING and you need to MOVE/FIND/NEXT_TO/FACING, first stand up. In such cases, set "necessity_to_use_action" to "yes" and include STANDUP as the first line. Avoid SITTING/LYING or ONTOP of chair/bed before completing FIND/NEXT_TO/FACING steps unless the final goal requires it. Once ONTOP/SITTING/LYING of a furniture, do not use MOVE/NEXT_TO/FACING actions unless you WAKEUP or STANDUP first.
 - Affordances and properties: Only assert states compatible with object properties from Relevant Objects. Examples: use PLUGGED_IN(obj) only if obj has HAS_PLUG. For BODY_PART like hands (if explicitly stated in scene), avoid INSIDE/HOLDS relations (e.g., do not include INSIDE(hands_both.*, sink.*) before RINSE(hands_both.*)).
 - Containers: If an item is INSIDE a container and the container is CLOSED, OPEN the container before GRAB/PUTIN/ONTOP (e.g., if plate.* is inside dishwasher.*, OPEN(dishwasher.*) before GRAB(plate.*)).
 - Minimal constraints: Do not over-constrain with unnecessary states (e.g., avoid asserting PLUGGED_IN for non-pluggable items, or redundant both-hands holds) unless required by the final goals.
 - Your output format should strictly follow this json format: {"necessity_to_use_action": <necessity>, "actions_to_include": [<actions>], "output": [<your subgoal plan>]}, where in <necessity> you should put "yes" or "no" to indicate whether actions should be included in subgoal plans. If you believe it is necessary to use actions, in the field <actions>, you should list all actions you used in your output. Otherwise, you should simply output an empty list []. In the field <your subgoal plan>, you should list all Boolean expressions in the required format and the temporal order.
+- When task requires character to be holding to an item in a specific hand(s), always HOLDS_RH first before HOLDS_LH. If only 1 item is required to be held, in HOLDS_LH, then hold something else in HOLDS_RH first (if possible) to avoid ambiguity. E.g., if only HOLDS_LH(character.1, toothbrush.1) is required, first do HOLDS_RH(character.1, tooth_paste.1) and then HOLDS_LH(character.1, toothbrush.1). Otherwise, if it is only required to HOLDS_RH, then just do HOLDS_RH. Do not use HOLDS_RH and/or HOLDS_LH on the same item twice.
+- "computer" should not have a "PLUGGED_IN" to be "ON", while "laptop" needs to be "PLUGGED_IN" to be "ON".
+- "floor_lamp" should not have a "PLUGGED_IN" to be "ON", while "light" needs to be "PLUGGED_IN" to be "ON".
+- If Goal States requires character to be FACING an object, make sure to include the FACING as the very last output step (after any included actions).
+- If water and water_glass are both in the same cupboard initially, assume the water is inside the water_glass and omit POUR action unless specified otherwise in Goal States.
 
 Below are two examples for your better understanding.
 ## Example 1: Task category is "Listen to music"
@@ -170,7 +175,7 @@ target_task_prompt = \
 # Self-check before you output:
 # - If initial states include SITTING or LYING and you need to move/turn, include WAKEUP first (set necessity_to_use_action="yes").
 # - Use only allowed actions; do not invent actions. If a natural action is unsupported, express its effect with states.
-# - Open containers before interacting with their contents.
+# - Open containers before interacting with their contents (e.g., OPEN dishwasher before any interactions with the item). An item can be ONTOP of kitchen_counter and still be INSIDE dishwasher.
 # - Only assert affordance-compatible states (e.g., PLUGGED_IN only for objects with HAS_PLUG; never GRAB BODY_PART).
 # - Use only object IDs present in Relevant Objects.
 # - Prefer the order: [INSIDE room] → NEXT_TO → FACING → [OPEN] → [GRAB] → [required actions] → resulting states.

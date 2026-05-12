@@ -22,7 +22,7 @@ Example:
 ]
 
 Preconditions examples:
-SWITCHON requires target HAS_SWITCH.
+SWITCHON requires target HAS_SWITCH (sink does not need SWITCHON).
 POUR requires source (POURABLE & DRINKABLE) and target RECIPIENT; source must be held (GRAB done earlier) and accessible (OPEN container if inside & CLOSED).
 
 Action Definitions Format:
@@ -34,7 +34,7 @@ DRINK: (1, [['DRINKABLE', 'RECIPIENT']]) # Consume a drinkable item
 FIND: (1, [obj]) # Locate and approach an item
 WALK: (1, [obj]) # Move towards something
 GRAB: (1, [['GRABBABLE']]) # Take hold of an item that can be grabbed
-LOOKAT: (1, [obj]) # Direct your gaze towards something
+LOOKAT: (1, [obj]) # Direct your gaze towards something, not required if already READing
 OPEN: (1, [['CAN_OPEN']]) # Open an item that can be opened
 POINTAT: (1, [obj]) # Point towards something
 PUTBACK: (2, [['GRABBABLE'], obj]) # Place one object back onto or into another
@@ -54,6 +54,7 @@ GREET: (1, [['PERSON']]) # Offer a greeting to a person
 DROP: (1, [obj]) # Let go of something so it falls
 READ: (1, [['READABLE']]) # Read text from an object
 LIE: (1, [['LIEABLE']]) # Lay oneself down on an object
+SLEEP: (0, [   ]) # Sleep, must be lying down first
 POUR: (2, [['POURABLE', 'DRINKABLE'], ['RECIPIENT']]) # Transfer a liquid from one container to another
 PUSH: (1, [['MOVABLE']]) # Exert force on something to move it away from you
 PULL: (1, [['MOVABLE']]) # Exert force on something to bring it towards you
@@ -76,22 +77,22 @@ Notice (core rules):
 4. Action names are UPPER CASE.
 5. If unsure you are NEAR an object, WALK to it first. Do not act from afar.
 6. Always include IDs with object names.
-7. Output must be non-empty.
+7. Output must be non-empty. If there are no action goals, just WALK to another room.
 8. To act on an object in another room: WALK that object (or its room) first.
 
 Additional critical rules to prevent common errors:
-9. ROOM TRANSITION: If current INSIDE room differs from target object's room/context, include a WALK to object (or its room) before other actions.
+9. ROOM TRANSITION: If current INSIDE room differs from target object's room/context, include a WALK to object (or its room) before other actions. Unless explicitly stated, light is in home_office.
 10. LOCALIZATION: For small or newly referenced objects, sequence: WALK -> FIND (once) -> next interaction (GRAB / OPEN / SWITCHON etc.). Skip FIND only if already clearly NEAR (explicit NEAR/ON edge given).
 11. ACTION GOALS OR LINES: For each OR line choose exactly ONE action; never output both. If an action appears (e.g., SLEEP) you must output that exact action.
 12. PRECONDITIONS: Ensure states before action. Example: SWITCHON only after (a) device is PLUGGED_IN (PLUGIN if PLUGGED_OUT) and (b) proximity established via WALK/FIND.
-13. DEVICE ACTIVATION TEMPLATE (unplugged device): WALK device -> (FIND if needed) -> PLUGIN (if PLUGGED_OUT) -> SWITCHON.
-14. COMPUTER USAGE (if chair present): WALK/FIND chair -> SIT -> WALK/FIND computer -> SWITCHON. Do not SWITCHON before being proximate; SIT usually precedes activation in seated contexts.
-15. TELEVISION VIEWING: SWITCHON before WATCH / LOOKAT. If seating (couch/chair) exists and viewing implied, SIT first, then TURNTO television, then LOOKAT or WATCH.
+13. DEVICE ACTIVATION TEMPLATE (unplugged device): WALK device -> (FIND if needed) -> PLUGIN (if PLUGGED_OUT) -> SWITCHON. For cd_player, WALK device -> FIND device -> (FIND headset -> GRAB headset) -> PLUGIN device -> SWITCHON
+14. COMPUTER USAGE (if chair present): (WALK into home_office if needed) -> WALK/FIND chair -> SIT -> FIND computer (do not WALK as already sitted) -> SWITCHON. Do not SWITCHON before being proximate; SIT usually precedes activation in seated contexts.
+15. TELEVISION VIEWING: First WALK into home_office if needed. SWITCHON before WATCH / LOOKAT. If seating (couch/chair) exists and viewing implied, SIT first, then TURNTO television, then LOOKAT or WATCH.
 16. DRINKING PATTERNS:
    a) Filled accessible container: WALK -> FIND (if needed) -> GRAB -> DRINK.
    b) Need to fill: OPEN storage (if CLOSED) -> FIND & GRAB container -> FIND & GRAB liquid source -> POUR -> DRINK -> CLOSE storage if reopened.
    c) Never POUR without GRABbing source first.
-17. HAND WASHING / RINSING: WALK sink/faucet -> FIND faucet -> SWITCHON faucet -> (optional FIND & GRAB soap) -> SCRUB (if soap) -> RINSE -> SWITCHOFF faucet -> (optional FIND & GRAB towel) -> WIPE. Do not RINSE before water available.
+17. HAND WASHING / RINSING: (WALK into dining_room if needed) -> WALK sink/faucet -> FIND faucet -> SWITCHON faucet -> (optional FIND & GRAB soap) -> SCRUB (if soap) -> RINSE -> SWITCHOFF faucet -> (optional FIND & GRAB towel) -> WIPE. Do not RINSE before water available.
 18. AVOID DUPLICATES: Do not repeat identical actions on same object unless they change state (e.g., cannot DRINK same glass twice without refill).
 19. NO HALLUCINATION: Do not assume PLUGGED_IN, OPEN, or NEAR states that are not listed; add necessary actions instead.
 20. CHECKLIST BEFORE OUTPUT: Each action has prior proximity, preconditions satisfied, OR lines each satisfied exactly once, no redundant repeats, logical ordering (e.g., SWITCHON before WATCH, GRAB source before POUR).
