@@ -1,3 +1,11 @@
+# Team SingaX ([2nd place at EAI Challenge @ NeurIPS 2025](https://foundation-models-meet-embodied-agents.github.io/eai_challenge/#winners))
+
+Team Members: Xinyuan Niu, Zhiliang Chen, Vernon Toh, Yanchao Li, Zhengyuan Liu, Nancy F. Chen
+
+Affiliations: A*STAR, NUS, NTU
+
+---
+
 <h1 align="center">Embodied Agent Interface (EAI): Benchmarking LLMs for Embodied Decision Making</h1>
 
 <p align="center">
